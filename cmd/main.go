@@ -8,13 +8,12 @@ import (
 	"github.com/Alice088/worm/internal/tui"
 )
 
-func main() {
-	// e := engine.NewEngine()
+const version = "v1"
 
-	p := tea.NewProgram(tui.InitialModel("v1"))
+func main() {
+	p := tea.NewProgram(tui.InitialModel(version))
 	if _, err := p.Run(); err != nil {
-		fmt.Printf("Alas, there's been an error: %v", err)
+		fmt.Fprintf(os.Stderr, "worm: %v\n", err)
 		os.Exit(1)
 	}
-	
 }
