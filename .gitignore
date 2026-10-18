@@ -1,2 +1,5 @@
 # local user config (display name etc.)
 .worm
+
+# build output
+/worm

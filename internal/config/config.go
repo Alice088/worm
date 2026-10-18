@@ -1,8 +1,7 @@
-// Package config loads and persists user settings in the ".worm" file.
+// Package config loads and persists user settings in the worm home directory.
 //
-// The file is stored as ".worm" in the current working directory, and falls
-// back to the user's config dir when the working directory is not writable,
-// so the app works both from a checkout and from a global install.
+// The config lives at ~/.worm/config (see package home) so it is shared by
+// every invocation regardless of the current working directory.
 package config
 
 import (
@@ -13,10 +12,12 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/Alice088/worm/internal/home"
 )
 
 // FileName is the on-disk name of the config file.
-const FileName = ".worm"
+const FileName = home.ConfigFile
 
 // Config is the persisted user state.
 type Config struct {
@@ -44,43 +45,13 @@ func LoadFrom(path string) (Config, error) {
 	return loadFrom(path)
 }
 
-// DefaultPath resolves where the config file lives.
+// DefaultPath resolves where the config file lives (~/.worm/config).
 func DefaultPath() string {
-	// Prefer the working directory so a project-local .worm wins.
-	if wd, err := os.Getwd(); err == nil {
-		candidate := filepath.Join(wd, FileName)
-		if _, err := os.Stat(candidate); err == nil {
-			return candidate
-		}
-		// No file yet: use the working dir if it is writable.
-		if isWritableDir(wd) {
-			return candidate
-		}
+	path, err := home.ConfigPath()
+	if err != nil || path == "" {
+		return FileName
 	}
-	return filepath.Join(userConfigDir(), "worm", FileName)
-}
-
-func userConfigDir() string {
-	dir, err := os.UserConfigDir()
-	if err != nil || dir == "" {
-		home, herr := os.UserHomeDir()
-		if herr != nil || home == "" {
-			return "."
-		}
-		return home
-	}
-	return dir
-}
-
-func isWritableDir(dir string) bool {
-	f, err := os.CreateTemp(dir, ".worm-write-test-*")
-	if err != nil {
-		return false
-	}
-	name := f.Name()
-	f.Close()
-	_ = os.Remove(name)
-	return true
+	return path
 }
 
 func loadFrom(path string) (Config, error) {

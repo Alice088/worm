@@ -3,6 +3,7 @@ package pages
 import (
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -275,7 +276,7 @@ func (m MainModel) View() string {
 
 	subtitle := fmt.Sprintf("worm %s · you: %s", m.Version, m.UserName)
 	if m.savePath != "" {
-		subtitle += StyleMuted.Render("  · name from " + filepath.Base(m.savePath))
+		subtitle += StyleMuted.Render("  · name from " + shortPath(m.savePath))
 	}
 
 	card := StyleCard.Render(lipgloss.JoinVertical(lipgloss.Left,
@@ -299,7 +300,7 @@ func (m MainModel) viewMenu() string {
 	}{
 		{"Create a call", "host a new room and share connect-data", "1"},
 		{"Join a call", "paste connect-data from another client", "2"},
-		{"Change my name", "stored in " + config.FileName + " as name=…", "3"},
+		{"Change my name", "stored in " + shortPath(m.savePath) + " as name=…", "3"},
 	}
 
 	var rows []string
@@ -360,6 +361,25 @@ func (m MainModel) viewName() string {
 		StyleHint.Render("enter save · esc cancel · ctrl+c quit"),
 	)
 	return lipgloss.JoinVertical(lipgloss.Left, lines...)
+}
+
+// shortPath renders a path relative to the user's home as ~/… to keep the
+// menu compact.
+func shortPath(p string) string {
+	if p == "" {
+		return ""
+	}
+
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" {
+		return p
+	}
+
+	rel, err := filepath.Rel(home, p)
+	if err != nil || strings.HasPrefix(rel, "..") {
+		return p
+	}
+	return "~" + string(filepath.Separator) + rel
 }
 
 func (m MainModel) fieldBox(content string) string {

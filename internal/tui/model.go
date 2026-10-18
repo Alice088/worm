@@ -9,6 +9,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/Alice088/worm/internal/config"
+	"github.com/Alice088/worm/internal/home"
 	"github.com/Alice088/worm/internal/session"
 	"github.com/Alice088/worm/internal/tui/pages"
 )
@@ -55,15 +56,20 @@ type Window struct {
 	Width int
 }
 
-// InitialModel loads branding assets and builds the root model.
+// InitialModel prepares the worm home directory (~/.worm) and builds the root
+// model from the config and assets stored there.
 func InitialModel(v string) Model {
-	b, err := os.ReadFile("./assets/worm")
-	if err != nil {
-		fmt.Println("failed read worm.txt")
-		os.Exit(1)
+	if _, err := home.Ensure(); err != nil {
+		// Non-fatal: fall back to the compiled-in branding and a derived name.
+		fmt.Fprintf(os.Stderr, "worm: cannot prepare %s: %v\n", home.DirName, err)
 	}
 
-	return newModel(v, string(b), config.DefaultPath())
+	branding, err := home.LoadAsset()
+	if err != nil || strings.TrimSpace(branding) == "" {
+		branding = home.DefaultAsset()
+	}
+
+	return newModel(v, branding, config.DefaultPath())
 }
 
 // newModel builds the root model bound to a specific config path.

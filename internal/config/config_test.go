@@ -135,20 +135,25 @@ func TestValidateNameEmptyReportsErrNoName(t *testing.T) {
 	}
 }
 
-func TestDefaultPathPrefersWorkingDirFile(t *testing.T) {
+func TestDefaultPathUsesWormHome(t *testing.T) {
 	dir := t.TempDir()
-	t.Chdir(dir)
+	t.Setenv("WORM_HOME", dir)
 
-	// No file yet, but the dir is writable: use it.
-	if got := DefaultPath(); got != filepath.Join(dir, FileName) {
-		t.Fatalf("expected working-dir path, got %q", got)
+	want := filepath.Join(dir, FileName)
+	if got := DefaultPath(); got != want {
+		t.Fatalf("expected %q, got %q", want, got)
 	}
+}
 
-	// Once a file exists it must keep winning.
-	if err := os.WriteFile(filepath.Join(dir, FileName), []byte("name=z\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if got := DefaultPath(); got != filepath.Join(dir, FileName) {
-		t.Fatalf("expected working-dir path, got %q", got)
+func TestDefaultPathIsIndependentOfWorkingDir(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("WORM_HOME", dir)
+
+	before := DefaultPath()
+	t.Chdir(t.TempDir())
+	after := DefaultPath()
+
+	if before != after {
+		t.Fatalf("config path changed with the working dir: %q -> %q", before, after)
 	}
 }
