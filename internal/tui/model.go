@@ -6,11 +6,11 @@ import (
 	"os"
 
 	tea "charm.land/bubbletea/v2"
-	"charm.land/lipgloss/v2"
+	"github.com/Alice088/worm/internal/tui/pages"
 )
 
 type Model struct {
-	Window Window
+	Window  Window
 	Version string
 	Name    string
 }
@@ -58,11 +58,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) View() tea.View {
-	var style = lipgloss.NewStyle().
-		Bold(true).
-		Foreground(lipgloss.Color("#FAFAFA")).
-		Background(lipgloss.Color("#7D56F4")).
-		Width(m.Window.Width)
-
-	return tea.NewView(style.Render(m.Name))
+	return tea.NewView(pages.WelcomeScreen(pages.WelcomeData{
+		AppName: m.Name,
+		WindowWidth: m.Window.Width,
+	}))
 }
