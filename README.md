@@ -311,6 +311,17 @@ a normal run while `-race` covers the remaining packages and lifecycle logic.
 Releases are built by `.github/workflows/release.yml` on a `v*` tag: versioned binaries,
 `worm_<version>_<os>_<arch>.tar.gz` archives, and `checksums.txt`.
 
+Cut a release:
+
+```bash
+make release TAG=v1.2.3
+git push --follow-tags origin master
+```
+
+`make release` refuses to tag a dirty tree, a non-`master` branch, a branch behind origin,
+an existing tag, or failing checks. Pushing the tag starts the release workflow; wait for it
+to finish before installing, otherwise the asset download returns 404.
+
 ## Limitations
 
 No accounts or contact list (calls are invite- or SDP/ICE-code only); server call state lives
