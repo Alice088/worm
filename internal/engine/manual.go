@@ -2,6 +2,7 @@ package engine
 
 import (
 	"context"
+	"errors"
 	"strconv"
 	"sync"
 
@@ -63,7 +64,7 @@ func (m *Manual) Offer(ctx context.Context) (session.Signal, error) {
 
 func (m *Manual) Answer(ctx context.Context, offer session.Signal) (session.Signal, error) {
 	if offer.Kind != session.SignalOffer {
-		return session.Signal{}, session.ErrSignalKind
+		return session.Signal{}, errors.New("wrong signal kind: expected an offer code")
 	}
 
 	m.opMu.Lock()
@@ -98,13 +99,13 @@ func (m *Manual) Answer(ctx context.Context, offer session.Signal) (session.Sign
 
 func (m *Manual) Connect(answer session.Signal) error {
 	if answer.Kind != session.SignalAnswer {
-		return session.ErrSignalKind
+		return errors.New("wrong signal kind: expected an answer code")
 	}
 	m.mu.Lock()
 	peer := m.peer
 	m.mu.Unlock()
 	if peer == nil {
-		return session.ErrSignalKind
+		return errors.New("create an offer first")
 	}
 	if err := m.applyRemote(peer, answer); err != nil {
 		return err
@@ -114,13 +115,13 @@ func (m *Manual) Connect(answer session.Signal) error {
 
 func (m *Manual) AddCandidates(code session.Signal) error {
 	if len(code.Candidates) == 0 {
-		return session.ErrSignalKind
+		return errors.New("that code has no candidates")
 	}
 	m.mu.Lock()
 	peer := m.peer
 	m.mu.Unlock()
 	if peer == nil {
-		return session.ErrSignalKind
+		return errors.New("answer an offer first")
 	}
 	for _, c := range code.Candidates {
 		peer.addCandidate(webrtcCandidateInit(protocol.ICECandidatePayload{Candidate: c}))

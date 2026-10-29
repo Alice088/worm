@@ -30,6 +30,14 @@ var ErrNoReleases = errors.New("no releases published yet")
 
 var httpClient = &http.Client{Timeout: 90 * time.Second}
 
+type Progress struct {
+	Stage string
+	Done  int64
+	Total int64
+}
+
+type ProgressFunc func(Progress)
+
 type Release struct {
 	Tag   string
 	Name  string
@@ -92,6 +100,13 @@ func AssetName(version string) (string, error) {
 }
 
 func Install(ctx context.Context, version string) (string, error) {
+	return InstallWithProgress(ctx, version, nil)
+}
+
+func InstallWithProgress(ctx context.Context, version string, report ProgressFunc) (string, error) {
+	if report == nil {
+		report = func(Progress) {}
+	}
 	target, err := SelfPath()
 	if err != nil {
 		return "", err
@@ -109,24 +124,38 @@ func Install(ctx context.Context, version string) (string, error) {
 	defer func() { _ = os.RemoveAll(workDir) }()
 
 	archivePath := filepath.Join(workDir, asset)
-	if err := download(ctx, base+asset, archivePath); err != nil {
+	if err := download(ctx, base+asset, archivePath, func(done, total int64) {
+		report(Progress{Stage: "download", Done: done, Total: total})
+	}); err != nil {
 		return "", err
 	}
 	sumsPath := filepath.Join(workDir, "checksums.txt")
-	if err := download(ctx, base+"checksums.txt", sumsPath); err != nil {
+	if err := download(ctx, base+"checksums.txt", sumsPath, func(done, total int64) {
+		report(Progress{Stage: "checksums", Done: done, Total: total})
+	}); err != nil {
 		return "", err
 	}
-	if err := verifyChecksum(sumsPath, asset, archivePath); err != nil {
+
+	info, err := os.Stat(archivePath)
+	if err != nil {
+		return "", err
+	}
+	if err := verifyChecksum(sumsPath, asset, archivePath, func(done int64) {
+		report(Progress{Stage: "verify", Done: done, Total: info.Size()})
+	}); err != nil {
 		return "", err
 	}
 
 	binaryPath := filepath.Join(workDir, "worm")
+	report(Progress{Stage: "extract"})
 	if err := extract(archivePath, "worm", binaryPath); err != nil {
 		return "", err
 	}
+	report(Progress{Stage: "install"})
 	if err := replaceFile(binaryPath, target); err != nil {
 		return "", err
 	}
+	report(Progress{Stage: "done"})
 	return target, nil
 }
 
@@ -167,7 +196,7 @@ func platform() (string, string, error) {
 	return runtime.GOOS, runtime.GOARCH, nil
 }
 
-func download(ctx context.Context, url, path string) error {
+func download(ctx context.Context, url, path string, report func(done, total int64)) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return err
@@ -187,13 +216,39 @@ func download(ctx context.Context, url, path string) error {
 	}
 	defer func() { _ = file.Close() }()
 
-	if _, err := io.Copy(file, resp.Body); err != nil {
+	reader := &progressReader{reader: resp.Body, total: resp.ContentLength, report: report}
+	if _, err := io.Copy(file, reader); err != nil {
 		return err
 	}
+	reader.flush()
 	return file.Close()
 }
 
-func verifyChecksum(sumsPath, asset, archivePath string) error {
+type progressReader struct {
+	reader io.Reader
+	total  int64
+	done   int64
+	report func(done, total int64)
+	last   time.Time
+}
+
+func (p *progressReader) Read(buf []byte) (int, error) {
+	n, err := p.reader.Read(buf)
+	p.done += int64(n)
+	if p.report != nil && time.Since(p.last) >= 100*time.Millisecond {
+		p.last = time.Now()
+		p.report(p.done, p.total)
+	}
+	return n, err
+}
+
+func (p *progressReader) flush() {
+	if p.report != nil {
+		p.report(p.done, p.total)
+	}
+}
+
+func verifyChecksum(sumsPath, asset, archivePath string, onProgress func(done int64)) error {
 	data, err := os.ReadFile(sumsPath)
 	if err != nil {
 		return err
@@ -217,9 +272,15 @@ func verifyChecksum(sumsPath, asset, archivePath string) error {
 	defer func() { _ = file.Close() }()
 
 	hash := sha256.New()
-	if _, err := io.Copy(hash, file); err != nil {
+	reader := &progressReader{reader: file, report: func(done, _ int64) {
+		if onProgress != nil {
+			onProgress(done)
+		}
+	}}
+	if _, err := io.Copy(hash, reader); err != nil {
 		return err
 	}
+	reader.flush()
 	actual := hex.EncodeToString(hash.Sum(nil))
 	if actual != expected {
 		return fmt.Errorf("checksum mismatch: expected %s, got %s", expected, actual)

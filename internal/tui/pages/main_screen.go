@@ -2,6 +2,7 @@ package pages
 
 import (
 	"errors"
+	"fmt"
 	"net/url"
 	"regexp"
 	"strings"
@@ -92,6 +93,9 @@ type MainModel struct {
 	noReleases bool
 	checking   bool
 	busy       bool
+	progStage  string
+	progDone   int64
+	progTotal  int64
 	selfPath   string
 }
 
@@ -421,6 +425,17 @@ func (m *MainModel) SetLatest(tag, notes string, err error) {
 // SetUpdating reports whether an update is running.
 func (m *MainModel) SetUpdating(busy bool) {
 	m.busy = busy
+	if !busy {
+		m.progStage = ""
+		m.progDone = 0
+		m.progTotal = 0
+	}
+}
+
+func (m *MainModel) SetProgress(stage string, done, total int64) {
+	m.progStage = stage
+	m.progDone = done
+	m.progTotal = total
 }
 
 // SetSelfPath records where the running binary lives.
@@ -594,7 +609,7 @@ func (m MainModel) viewVersion() string {
 	lines = append(lines, "")
 	switch {
 	case m.busy:
-		lines = append(lines, StyleHint.Render("installing…"))
+		lines = append(lines, m.progressLines()...)
 	case m.noReleases:
 		lines = append(lines, StyleHint.Render("r · esc"))
 	case m.updateAvailable():
@@ -618,6 +633,54 @@ func (m MainModel) viewServer() string {
 		StyleHint.Render("enter · esc"),
 	)
 	return lipgloss.JoinVertical(lipgloss.Left, lines...)
+}
+
+func (m MainModel) progressLines() []string {
+	if m.progStage == "" {
+		return []string{StyleHint.Render("installing…")}
+	}
+	label := map[string]string{
+		"download":  "downloading",
+		"checksums": "downloading checksums",
+		"verify":    "verifying checksum",
+		"extract":   "extracting",
+		"install":   "installing",
+		"done":      "done",
+	}[m.progStage]
+	if label == "" {
+		label = m.progStage
+	}
+	if m.progTotal <= 0 {
+		if m.progDone > 0 {
+			return []string{StyleMuted.Render(label + " · " + formatBytes(m.progDone))}
+		}
+		return []string{StyleMuted.Render(label + "…")}
+	}
+	percent := min(100, int(m.progDone*100/m.progTotal))
+	width := min(24, max(8, m.W-40))
+	filled := width * percent / 100
+	bar := lipgloss.NewStyle().Foreground(ColAccent).Render(strings.Repeat("━", filled)) +
+		StyleMuted.Render(strings.Repeat("━", width-filled))
+	return []string{
+		StyleMuted.Render(label),
+		bar + " " + StyleText.Render(fmt.Sprintf("%d%%", percent)),
+		StyleMuted.Render(fmt.Sprintf("%s / %s", formatBytes(m.progDone), formatBytes(m.progTotal))),
+	}
+}
+
+func formatBytes(n int64) string {
+	const unit = 1024
+	if n < unit {
+		return fmt.Sprintf("%d B", n)
+	}
+	value := float64(n)
+	for _, suffix := range []string{"KB", "MB", "GB"} {
+		value /= unit
+		if value < unit {
+			return fmt.Sprintf("%.1f %s", value, suffix)
+		}
+	}
+	return fmt.Sprintf("%.1f TB", value/unit)
 }
 
 func (m MainModel) releaseNotes() []string {

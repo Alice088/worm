@@ -63,6 +63,8 @@ type Model struct {
 	register  func(context.Context, string, string) (client.Session, error)
 
 	fatal error
+
+	updateProgress chan updater.Progress
 }
 
 type Window struct {
@@ -154,6 +156,12 @@ type updateInstallMsg struct {
 	err error
 }
 
+type updateProgressMsg struct {
+	stage string
+	done  int64
+	total int64
+}
+
 type uninstallMsg struct{ err error }
 
 func checkUpdate() tea.Cmd {
@@ -165,12 +173,28 @@ func checkUpdate() tea.Cmd {
 	}
 }
 
-func installUpdate(tag string) tea.Cmd {
+func installUpdate(tag string, progress chan updater.Progress) tea.Cmd {
 	return func() tea.Msg {
+		defer close(progress)
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 		defer cancel()
-		_, err := updater.Install(ctx, tag)
+		_, err := updater.InstallWithProgress(ctx, tag, func(p updater.Progress) {
+			select {
+			case progress <- p:
+			default:
+			}
+		})
 		return updateInstallMsg{tag: tag, err: err}
+	}
+}
+
+func waitProgress(progress <-chan updater.Progress) tea.Cmd {
+	return func() tea.Msg {
+		p, ok := <-progress
+		if !ok {
+			return nil
+		}
+		return updateProgressMsg{stage: p.Stage, done: p.Done, total: p.Total}
 	}
 }
 
@@ -241,6 +265,8 @@ type manualCodeMsg struct {
 
 type manualDoneMsg struct{ err error }
 
+type manualNoticeMsg struct{ text string }
+
 type manualEventMsg engine.Event
 
 type savedSignalMsg string
@@ -277,6 +303,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.main.SetLatest(msg.release.Tag, msg.release.Notes, msg.err)
 		return m, nil
+
+	case updateProgressMsg:
+		m.main.SetProgress(msg.stage, msg.done, msg.total)
+		return m, waitProgress(m.updateProgress)
 
 	case updateInstallMsg:
 		m.main.SetUpdating(false)
@@ -327,6 +357,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case manualDoneMsg:
 		return m.handleManualDone(msg)
+
+	case manualNoticeMsg:
+		m.manualUI.SetNotice(msg.text)
+		return m, nil
 
 	case savedSignalMsg:
 		if m.screen == ScreenManual {
@@ -395,7 +429,9 @@ func (m Model) updateMain(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case pages.ActionInstallUpdate:
 		m.main.SetUpdating(true)
-		return m, installUpdate(data)
+		progress := make(chan updater.Progress, 16)
+		m.updateProgress = progress
+		return m, tea.Batch(installUpdate(data, progress), waitProgress(progress))
 
 	case pages.ActionUninstall:
 		return m, uninstallWorm()
@@ -575,6 +611,12 @@ func (m Model) updateManual(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if err != nil {
 				return manualCodeMsg{err: err}
 			}
+			switch offer.Kind {
+			case session.SignalAnswer:
+				return manualNoticeMsg{text: "that is an answer code · send it back to the caller"}
+			case session.SignalCandidates:
+				return manualNoticeMsg{text: "that is a candidates code · paste it after the answer"}
+			}
 			ctx, cancel := timeout()
 			defer cancel()
 			answer, err := manual.Answer(ctx, offer)
@@ -591,6 +633,12 @@ func (m Model) updateManual(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if err != nil {
 				return manualDoneMsg{err: err}
 			}
+			switch answer.Kind {
+			case session.SignalOffer:
+				return manualNoticeMsg{text: "that is an offer code · send yours and paste the answer"}
+			case session.SignalCandidates:
+				return manualDoneMsg{err: manual.AddCandidates(answer)}
+			}
 			return manualDoneMsg{err: manual.Connect(answer)}
 		}
 
@@ -599,6 +647,9 @@ func (m Model) updateManual(msg tea.Msg) (tea.Model, tea.Cmd) {
 			code, err := session.DecodeSignal(data)
 			if err != nil {
 				return manualDoneMsg{err: err}
+			}
+			if len(code.Candidates) == 0 {
+				return manualNoticeMsg{text: "that code has no candidates · paste the candidates code"}
 			}
 			return manualDoneMsg{err: manual.AddCandidates(code)}
 		}

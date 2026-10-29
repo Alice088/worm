@@ -69,7 +69,8 @@ curl -fsSL https://raw.githubusercontent.com/Alice088/worm/master/install.sh | b
 ```
 
 In the TUI, `4` shows the installed and latest version, lists the release notes when a newer
-version exists, and installs it in place.
+version exists, and installs it in place. During the update it shows the current stage, a
+progress bar, and downloaded bytes, so a slow download never looks stuck.
 
 The same actions are available in the TUI under **Version & updates** and
 **Uninstall worm**.
@@ -313,7 +314,8 @@ handshake under instrumentation does not fit the ICE timers, so the media path i
 a normal run while `-race` covers the remaining packages and lifecycle logic.
 
 Releases are built by `.github/workflows/release.yml` on a `v*` tag: versioned binaries,
-`worm_<version>_<os>_<arch>.tar.gz` archives, and `checksums.txt`.
+`worm_<version>_<os>_<arch>.tar.gz` archives, and `checksums.txt`. The change history lives
+in [CHANGELOG.md](CHANGELOG.md).
 
 Cut a release:
 
