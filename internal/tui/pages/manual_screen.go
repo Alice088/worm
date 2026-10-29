@@ -218,18 +218,18 @@ func (m ManualModel) View() string {
 	}
 	contentW := max(40, min(100, w-4))
 
+	statusColor := ColMuted
+	if m.Stage == ManualConnected {
+		statusColor = ColOK
+	}
 	header := lipgloss.JoinHorizontal(lipgloss.Left,
-		StyleTitle.Render(" MANUAL "),
-		" ",
-		lipgloss.NewStyle().Bold(true).Foreground(ColText).Render("SDP + ICE"),
-		"  ",
-		lipgloss.NewStyle().Foreground(ColOK).Render("● "+m.Status),
+		StyleTitle.Render("manual"),
+		"   ",
+		lipgloss.NewStyle().Foreground(statusColor).Render("● "+m.Status),
 	)
 
 	parts := []string{
 		header, "",
-		StyleMuted.Render("No server needed: exchange one code at a time."),
-		"",
 		StyleLabel.Render(m.stepTitle()),
 		"",
 	}
@@ -243,9 +243,9 @@ func (m ManualModel) View() string {
 
 	switch {
 	case m.Err != "":
-		parts = append(parts, StyleError.Render("✗ "+m.Err), "")
+		parts = append(parts, StyleError.Render(m.Err), "")
 	case m.Notice != "":
-		parts = append(parts, StyleOK.Render("✓ "+m.Notice), "")
+		parts = append(parts, StyleOK.Render(m.Notice), "")
 	}
 	if m.Quality != "" {
 		parts = append(parts, StyleMuted.Render(m.Quality), "")
@@ -275,15 +275,15 @@ func clipHeight(s string, height int) string {
 func (m ManualModel) stepTitle() string {
 	switch m.Stage {
 	case ManualPasteOffer:
-		return "STEP 2 — paste the caller's offer code"
+		return "OFFER"
 	case ManualAwaitAnswer:
-		return "STEP 2 — send your offer, paste the answer back"
+		return "ANSWER"
 	case ManualAwaitConnect:
-		return "STEP 3 — send your answer and wait for the caller"
+		return "WAITING"
 	case ManualConnected:
 		return "CONNECTED"
 	default:
-		return "STEP 1 — choose your side"
+		return "CHOOSE"
 	}
 }
 
@@ -293,16 +293,12 @@ func (m ManualModel) codeBlock(width int) string {
 		preview = preview[:30] + "…"
 	}
 	body := lipgloss.JoinVertical(lipgloss.Left,
-		StyleMuted.Render(fmt.Sprintf("%d bytes · preview", len(m.Code))),
-		"",
 		lipgloss.NewStyle().Foreground(ColAccent2).Render(preview),
+		StyleMuted.Render(fmt.Sprintf("%d bytes", len(m.Code))),
 		"",
-		StyleHint.Render("c — copy · s — save to file"),
+		StyleHint.Render("c copy · s save"),
 	)
 	return lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(ColAccent).
-		Padding(0, 1).
 		Width(max(20, width)).
 		Render(body)
 }
@@ -313,13 +309,13 @@ func (m ManualModel) fieldBlock(width int) string {
 	case ManualAwaitAnswer:
 		label = "PASTE ANSWER CODE"
 	case ManualAwaitConnect:
-		label = "PASTE MORE CANDIDATES (OPTIONAL)"
+		label = "MORE CANDIDATES"
 	}
 	return lipgloss.JoinVertical(lipgloss.Left,
 		StyleLabel.Render(label),
 		lipgloss.NewStyle().
-			Border(lipgloss.NormalBorder()).
-			BorderForeground(ColAccent2).
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(ColLine).
 			Padding(0, 1).
 			Width(max(20, width-2)).
 			Render(m.input.View()),
@@ -332,20 +328,20 @@ func (m ManualModel) viewButtons() string {
 	for i, b := range buttons {
 		rendered = append(rendered, button(b.label, m.focus == i, b.kind))
 	}
-	return lipgloss.JoinHorizontal(lipgloss.Center, strings.Join(rendered, "  "))
+	return lipgloss.JoinHorizontal(lipgloss.Center, strings.Join(rendered, " "))
 }
 
 func (m ManualModel) hint() string {
 	switch m.Stage {
 	case ManualPasteOffer:
-		return "enter generate · ctrl+v paste · esc back"
+		return "enter · esc"
 	case ManualAwaitAnswer:
-		return "c copy · s save · paste answer · enter connect"
+		return "c · s · enter"
 	case ManualAwaitConnect:
-		return "c copy · s save · paste extra candidates if needed"
+		return "c · s"
 	case ManualConnected:
-		return "m mute · q end call"
+		return "m · q"
 	default:
-		return "↑/↓ move · enter activate · q quit"
+		return "↑↓ · enter"
 	}
 }

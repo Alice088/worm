@@ -32,7 +32,7 @@ type Credential struct {
 	ExpiresAt time.Time `json:"expires_at"`
 }
 
-var ErrServerNotConfigured = errors.New("server is not configured: set server= in ~/.worm/config or WORM_SERVER")
+var ErrServerNotConfigured = errors.New("server not configured · press 6")
 
 func NormalizeServer(raw string) (string, error) {
 	raw = strings.TrimSpace(raw)

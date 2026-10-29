@@ -2,10 +2,7 @@ package pages
 
 import (
 	"errors"
-	"fmt"
 	"net/url"
-	"os"
-	"path/filepath"
 	"strings"
 
 	"charm.land/bubbles/v2/textinput"
@@ -79,34 +76,35 @@ type MainModel struct {
 
 	W, H int
 
-	mode      MainMode
-	index     int
-	joinIn    codeInput
-	nameIn    textinput.Model
-	serverIn  textinput.Model
-	err       string
-	notice    string
-	noticeErr string
-	savePath  string
-	latest    string
-	latestErr string
-	checking  bool
-	busy      bool
-	selfPath  string
+	mode       MainMode
+	index      int
+	joinIn     codeInput
+	nameIn     textinput.Model
+	serverIn   textinput.Model
+	err        string
+	notice     string
+	noticeErr  string
+	savePath   string
+	latest     string
+	latestErr  string
+	noReleases bool
+	checking   bool
+	busy       bool
+	selfPath   string
 }
 
 // NewMain builds the main screen model.
 func NewMain(appName, version, userName, savePath string) MainModel {
-	join := newCodeInput("hex invite code", 4096)
+	join := newCodeInput("invite code", 4096)
 
 	name := textinput.New()
-	name.Placeholder = "your display name"
+	name.Placeholder = "display name"
 	name.Prompt = "✎ "
 	name.CharLimit = 32
 	name.SetValue(userName)
 
 	server := textinput.New()
-	server.Placeholder = "http://host:8080 (empty = manual only)"
+	server.Placeholder = "server URL (optional)"
 	server.Prompt = "⇄ "
 	server.CharLimit = 256
 
@@ -219,6 +217,7 @@ func (m MainModel) openVersion() (MainModel, MainMenuAction, string, tea.Cmd) {
 	m.mode = ModeVersion
 	m.latest = ""
 	m.latestErr = ""
+	m.noReleases = false
 	m.checking = true
 	m.noticeErr = ""
 	return m, ActionCheckUpdate, "", nil
@@ -396,8 +395,16 @@ func (m *MainModel) SetNotice(msg string) {
 }
 
 // SetLatest records the newest release tag fetched from GitHub.
+func (m *MainModel) SetNoReleases() {
+	m.checking = false
+	m.noReleases = true
+	m.latest = ""
+	m.latestErr = ""
+}
+
 func (m *MainModel) SetLatest(tag string, err error) {
 	m.checking = false
+	m.noReleases = false
 	m.latest = tag
 	if err != nil {
 		m.latestErr = err.Error()
@@ -455,16 +462,14 @@ func (m MainModel) View() string {
 		body = m.viewMenu()
 	}
 
-	subtitle := fmt.Sprintf("worm %s · you: %s", m.Version, m.UserName)
+	meta := m.UserName
 	if m.Server != "" {
-		subtitle += StyleMuted.Render("  · server " + m.Server)
-	} else {
-		subtitle += StyleMuted.Render("  · no server configured")
+		meta += " · " + m.Server
 	}
 
 	card := StyleCard.Render(lipgloss.JoinVertical(lipgloss.Left,
-		StyleTitle.Render(" "+m.AppName+" "),
-		StyleSubtitle.Render(subtitle),
+		StyleTitle.Render(m.AppName),
+		StyleSubtitle.Render(m.Version+" · "+meta),
 		"",
 		body,
 	))
@@ -478,46 +483,50 @@ func (m MainModel) View() string {
 func (m MainModel) viewMenu() string {
 	entries := [menuCount]struct {
 		label string
-		desc  string
 		key   string
 	}{
-		{"Create a call", "start a call and share the invite code", "1"},
-		{"Join a call", "paste an invite code from another client", "2"},
-		{"Manual exchange", "swap SDP + ICE codes with a peer, no server", "m"},
-		{"Change my name", "stored in " + shortPath(m.savePath) + " as name=…", "3"},
-		{"Set signaling server", "enables Create/Join; manual exchange needs none", "6"},
-		{"Version & updates", "shows the installed version and installs the latest", "4"},
-		{"Uninstall worm", "removes the program from this machine", "5"},
+		{"Create a call", "1"},
+		{"Join a call", "2"},
+		{"Manual exchange", "m"},
+		{"Change my name", "3"},
+		{"Set signaling server", "6"},
+		{"Version & updates", "4"},
+		{"Uninstall worm", "5"},
+	}
+
+	labelW := 0
+	for _, e := range entries {
+		labelW = max(labelW, lipgloss.Width(e.label))
 	}
 
 	var rows []string
 	for i, e := range entries {
-		selected := i == m.index
+		if i == menuRename {
+			rows = append(rows, "")
+		}
+		if i == menuVersion {
+			rows = append(rows, "")
+		}
 
 		cursor := "  "
-		if selected {
-			cursor = "▸ "
+		label := StyleText.Render(e.label)
+		if i == m.index {
+			cursor = lipgloss.NewStyle().Foreground(ColAccent).Render("▌ ")
+			label = lipgloss.NewStyle().Bold(true).Foreground(ColAccent).Render(e.label)
 		}
 
-		label := lipgloss.NewStyle().Foreground(ColText).Render(e.label)
-		if selected {
-			label = button(e.label, true, "default")
-		}
-
-		rows = append(rows,
-			cursor+StyleMuted.Render("["+e.key+"]")+" "+label,
-			"     "+StyleMuted.Render(e.desc),
-		)
+		pad := strings.Repeat(" ", labelW-lipgloss.Width(e.label)+2)
+		rows = append(rows, cursor+label+StyleMuted.Render(pad+e.key))
 	}
 
 	rows = append(rows, "")
 	switch {
 	case m.noticeErr != "":
-		rows = append(rows, StyleError.Render("✗ "+m.noticeErr))
+		rows = append(rows, StyleError.Render(m.noticeErr))
 	case m.notice != "":
-		rows = append(rows, StyleOK.Render("✓ "+m.notice))
+		rows = append(rows, StyleOK.Render(m.notice))
 	default:
-		rows = append(rows, StyleHint.Render("↑/↓ select · enter activate · ctrl+c quit"))
+		rows = append(rows, StyleHint.Render("↑↓ · enter"))
 	}
 	return lipgloss.JoinVertical(lipgloss.Left, rows...)
 }
@@ -532,7 +541,7 @@ func (m MainModel) viewJoin() string {
 	}
 	lines = append(lines,
 		"",
-		StyleHint.Render("enter join · esc back · ctrl+v paste · ctrl+c quit"),
+		StyleHint.Render("enter · esc"),
 	)
 	return lipgloss.JoinVertical(lipgloss.Left, lines...)
 }
@@ -541,14 +550,13 @@ func (m MainModel) viewName() string {
 	lines := []string{
 		StyleLabel.Render("DISPLAY NAME"),
 		m.fieldBox(m.nameIn.View()),
-		StyleMuted.Render("saved to " + m.savePath),
 	}
 	if m.err != "" {
 		lines = append(lines, StyleError.Render("✗ "+m.err))
 	}
 	lines = append(lines,
 		"",
-		StyleHint.Render("enter save · esc cancel · ctrl+c quit"),
+		StyleHint.Render("enter · esc"),
 	)
 	return lipgloss.JoinVertical(lipgloss.Left, lines...)
 }
@@ -556,28 +564,32 @@ func (m MainModel) viewName() string {
 func (m MainModel) viewVersion() string {
 	lines := []string{
 		StyleLabel.Render("INSTALLED"),
-		lipgloss.NewStyle().Foreground(ColAccent2).Render(m.Version),
+		StyleText.Render(m.Version),
 		"",
 		StyleLabel.Render("LATEST"),
 	}
 	switch {
 	case m.checking:
 		lines = append(lines, StyleMuted.Render("checking github…"))
+	case m.noReleases:
+		lines = append(lines, StyleMuted.Render("no releases yet"))
 	case m.latestErr != "":
-		lines = append(lines, StyleError.Render("✗ "+m.latestErr))
+		lines = append(lines, StyleError.Render(m.latestErr))
 	case m.updateAvailable():
-		lines = append(lines, StyleOK.Render(m.latest+" — update available"))
+		lines = append(lines, StyleOK.Render(m.latest+" · update available"))
 	default:
-		lines = append(lines, StyleOK.Render(m.latest+" — up to date"))
+		lines = append(lines, StyleMuted.Render(m.latest+" · up to date"))
 	}
 	lines = append(lines, "")
 	switch {
 	case m.busy:
-		lines = append(lines, StyleHint.Render("installing update…"))
+		lines = append(lines, StyleHint.Render("installing…"))
+	case m.noReleases:
+		lines = append(lines, StyleHint.Render("r · esc"))
 	case m.updateAvailable():
-		lines = append(lines, StyleHint.Render("enter update · r recheck · esc back"))
+		lines = append(lines, StyleHint.Render("enter update · r · esc"))
 	default:
-		lines = append(lines, StyleHint.Render("r recheck · esc back"))
+		lines = append(lines, StyleHint.Render("r · esc"))
 	}
 	return lipgloss.JoinVertical(lipgloss.Left, lines...)
 }
@@ -586,14 +598,13 @@ func (m MainModel) viewServer() string {
 	lines := []string{
 		StyleLabel.Render("SIGNALING SERVER"),
 		m.fieldBox(m.serverIn.View()),
-		StyleMuted.Render("leave empty to use manual exchange only"),
 	}
 	if m.err != "" {
 		lines = append(lines, StyleError.Render("✗ "+m.err))
 	}
 	lines = append(lines,
 		"",
-		StyleHint.Render("enter save · esc cancel · ctrl+v paste"),
+		StyleHint.Render("enter · esc"),
 	)
 	return lipgloss.JoinVertical(lipgloss.Left, lines...)
 }
@@ -621,38 +632,17 @@ func (m MainModel) viewUninstall() string {
 		target = "worm"
 	}
 	lines := []string{
-		StyleLabel.Render("UNINSTALL WORM"),
-		StyleMuted.Render("removes " + target),
-		StyleMuted.Render("config in ~/.worm is kept"),
+		StyleLabel.Render("UNINSTALL"),
+		StyleMuted.Render(target),
+		StyleMuted.Render("config kept in ~/.worm"),
 		"",
-		StyleError.Render("this cannot be undone"),
-		"",
-		StyleHint.Render("y remove · esc cancel"),
+		StyleHint.Render("y · esc"),
 	}
 	return lipgloss.JoinVertical(lipgloss.Left, lines...)
 }
 
 func (m MainModel) updateAvailable() bool {
 	return m.latest != "" && m.latest != m.Version
-}
-
-// shortPath renders a path relative to the user's home as ~/… to keep the
-// menu compact.
-func shortPath(p string) string {
-	if p == "" {
-		return ""
-	}
-
-	home, err := os.UserHomeDir()
-	if err != nil || home == "" {
-		return p
-	}
-
-	rel, err := filepath.Rel(home, p)
-	if err != nil || strings.HasPrefix(rel, "..") {
-		return p
-	}
-	return "~" + string(filepath.Separator) + rel
 }
 
 func (m MainModel) fieldBox(content string) string {

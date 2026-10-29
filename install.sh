@@ -102,7 +102,7 @@ latest_tag() {
 	esac
 	tag="$(curl -fsSL "https://api.github.com/repos/$REPO/releases/latest" \
 		| sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n 1)"
-	[ -n "$tag" ] || fail "cannot resolve the latest release tag"
+	[ -n "$tag" ] || fail "no releases published yet: https://github.com/$REPO/releases"
 	printf '%s\n' "$tag"
 }
 

@@ -26,6 +26,8 @@ var DownloadBase = "https://github.com/" + Repo + "/releases/download"
 
 var ErrUnsupported = errors.New("self-update is supported on linux and darwin only")
 
+var ErrNoReleases = errors.New("no releases published yet")
+
 var httpClient = &http.Client{Timeout: 90 * time.Second}
 
 func Latest(ctx context.Context) (string, error) {
@@ -44,6 +46,9 @@ func Latest(ctx context.Context) (string, error) {
 	}
 	defer func() { _ = resp.Body.Close() }()
 
+	if resp.StatusCode == http.StatusNotFound {
+		return "", ErrNoReleases
+	}
 	if resp.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("github api: %s", resp.Status)
 	}

@@ -2,90 +2,67 @@ package pages
 
 import "charm.land/lipgloss/v2"
 
-// Palette shared by every screen.
+// Palette shared by every screen: scarlet on black.
 var (
-	ColAccent  = lipgloss.Color("#7D56F4")
-	ColAccent2 = lipgloss.Color("#B49BFF")
-	ColText    = lipgloss.Color("#FAFAFA")
-	ColMuted   = lipgloss.Color("#8B8B93")
-	ColDanger  = lipgloss.Color("#FF5F87")
-	ColOK      = lipgloss.Color("#5FD787")
-	ColWarn    = lipgloss.Color("#FFD75F")
+	ColAccent  = lipgloss.Color("#FF2D2D")
+	ColAccent2 = lipgloss.Color("#FF7A7A")
+	ColText    = lipgloss.Color("#F2F2F2")
+	ColMuted   = lipgloss.Color("#6C6C74")
+	ColDanger  = lipgloss.Color("#FF2D2D")
+	ColOK      = lipgloss.Color("#7BE495")
+	ColWarn    = lipgloss.Color("#FFC24B")
+	ColLine    = lipgloss.Color("#26262B")
+	ColSurface = lipgloss.Color("#141416")
+	ColInk     = lipgloss.Color("#0A0A0A")
 )
 
 // Common styles.
 var (
-	// StyleTitle is the big screen heading.
 	StyleTitle = lipgloss.NewStyle().
 			Bold(true).
-			Foreground(ColText).
-			Background(ColAccent).
-			Padding(0, 1)
+			Foreground(ColAccent)
 
-	// StyleSubtitle is the muted line under a title.
 	StyleSubtitle = lipgloss.NewStyle().
 			Foreground(ColMuted)
 
-	// StyleCard is the bordered container used for panels.
 	StyleCard = lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
-			BorderForeground(ColAccent).
-			Padding(1, 2)
+			BorderForeground(ColLine).
+			Padding(2, 4)
 
-	// StyleCardFocused is the highlighted variant of StyleCard.
 	StyleCardFocused = lipgloss.NewStyle().
 				Border(lipgloss.RoundedBorder()).
-				BorderForeground(ColAccent2).
-				Padding(1, 2)
+				BorderForeground(ColAccent).
+				Padding(2, 4)
 
-	// StyleMuted renders secondary information.
+	StyleText = lipgloss.NewStyle().Foreground(ColText)
+
 	StyleMuted = lipgloss.NewStyle().Foreground(ColMuted)
 
-	// StyleHint renders the footer help line.
-	StyleHint = lipgloss.NewStyle().Foreground(ColMuted).Italic(true)
+	StyleHint = lipgloss.NewStyle().Foreground(ColMuted)
 
-	// StyleError renders an inline error.
-	StyleError = lipgloss.NewStyle().Foreground(ColDanger).Bold(true)
+	StyleError = lipgloss.NewStyle().Foreground(ColDanger)
 
-	// StyleOK renders a success flash.
-	StyleOK = lipgloss.NewStyle().Foreground(ColOK).Bold(true)
+	StyleOK = lipgloss.NewStyle().Foreground(ColOK)
 
-	// StyleLabel renders small uppercase field labels.
 	StyleLabel = lipgloss.NewStyle().Foreground(ColMuted).Bold(true)
 )
 
 // button renders a clickable-looking action label.
 func button(label string, focused bool, kind string) string {
-	style := lipgloss.NewStyle().Padding(0, 1).Foreground(ColText)
+	style := lipgloss.NewStyle().Padding(0, 2)
 	if focused {
-		style = style.Bold(true)
+		return style.Bold(true).Foreground(ColInk).Background(ColAccent).Render(label)
 	}
 
 	switch kind {
 	case "danger":
-		style = style.Background(ColDanger)
-		if !focused {
-			style = style.Background(lipgloss.Color("#4A2430"))
-		}
+		return style.Foreground(ColDanger).Render(label)
 	case "warn":
-		style = style.Background(ColWarn).Foreground(lipgloss.Color("#1A1A1A"))
-		if !focused {
-			style = style.Foreground(ColWarn).Background(lipgloss.Color("#3D3520"))
-		}
+		return style.Foreground(ColWarn).Render(label)
 	case "ok":
-		style = style.Background(ColOK).Foreground(lipgloss.Color("#10210F"))
-		if !focused {
-			style = style.Foreground(ColOK).Background(lipgloss.Color("#1E3325"))
-		}
+		return style.Foreground(ColOK).Render(label)
 	default:
-		style = style.Background(ColAccent)
-		if !focused {
-			style = style.Foreground(ColAccent2).Background(lipgloss.Color("#2A2340"))
-		}
+		return style.Foreground(ColText).Render(label)
 	}
-
-	if focused {
-		style = style.Underline(true)
-	}
-	return style.Render(label)
 }

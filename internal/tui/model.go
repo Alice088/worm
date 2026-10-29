@@ -271,6 +271,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		})
 
 	case updateCheckMsg:
+		if errors.Is(msg.err, updater.ErrNoReleases) {
+			m.main.SetNoReleases()
+			return m, nil
+		}
 		m.main.SetLatest(msg.tag, msg.err)
 		return m, nil
 

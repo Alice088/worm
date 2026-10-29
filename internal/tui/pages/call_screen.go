@@ -187,10 +187,8 @@ func (m CallModel) View() string {
 	colW := (contentW - 3) / 2
 
 	header := lipgloss.JoinHorizontal(lipgloss.Left,
-		StyleTitle.Render(" CALL "),
-		" ",
 		lipgloss.NewStyle().Bold(true).Foreground(ColText).Render(m.Room),
-		"  ",
+		"   ",
 		m.badge(),
 	)
 
@@ -204,9 +202,9 @@ func (m CallModel) View() string {
 	}
 	switch {
 	case m.noticeErr != "":
-		parts = append(parts, "", StyleError.Render("✗ "+m.noticeErr))
+		parts = append(parts, "", StyleError.Render(m.noticeErr))
 	case m.noticeOK != "":
-		parts = append(parts, "", StyleOK.Render("✓ "+m.noticeOK))
+		parts = append(parts, "", StyleOK.Render(m.noticeOK))
 	}
 	parts = append(parts, "", StyleHint.Render(m.hint()))
 
@@ -221,16 +219,13 @@ func (m CallModel) hint() string {
 	switch m.State {
 	case "ringing":
 		if m.Role == "callee" {
-			return "a accept · r reject · q leave"
+			return "a · r · q"
 		}
-		return "share the invite code · c copy · q cancel"
+		return "c copy · q cancel"
 	case "accepted", "connecting", "connected":
-		return "←/→ move · enter activate · m mute · q end"
+		return "←→ · enter · m · q"
 	default:
-		if m.Terminal() {
-			return "q back to main"
-		}
-		return "q cancel"
+		return "q"
 	}
 }
 
@@ -254,14 +249,13 @@ func (m CallModel) badge() string {
 }
 
 func (m CallModel) panel(title, body string, w int) string {
-	titleLine := StyleLabel.Render(title)
-	inner := lipgloss.JoinVertical(lipgloss.Left, titleLine, "", body)
 	return lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(ColAccent).
-		Padding(0, 1).
 		Width(max(10, w)).
-		Render(inner)
+		Render(lipgloss.JoinVertical(lipgloss.Left,
+			StyleLabel.Render(title),
+			"",
+			body,
+		))
 }
 
 func (m CallModel) viewMembers() string {
@@ -288,25 +282,20 @@ func (m CallModel) memberRow(name string, self bool) string {
 		mic = lipgloss.NewStyle().Foreground(ColDanger).Render("🔇")
 	}
 
-	label := lipgloss.NewStyle().Foreground(ColText).Render(name)
+	label := StyleText.Render(name)
 	suffix := ""
 	if self {
-		suffix = StyleMuted.Render(" (you)")
+		suffix = StyleMuted.Render("  you")
 	}
-
-	status := ""
-	if !self && m.State != "" {
-		status = " " + StyleMuted.Render("· "+m.State)
-	}
-	return " " + mic + " " + label + suffix + status
+	return mic + "  " + label + suffix
 }
 
 func (m CallModel) viewInvite(width int) string {
 	if m.Invite == "" {
 		if m.State == "ringing" && m.Role == "callee" {
-			return StyleMuted.Render("invite accepted, waiting for caller")
+			return StyleMuted.Render("waiting for caller")
 		}
-		return StyleMuted.Render("no invite yet")
+		return StyleMuted.Render("—")
 	}
 
 	code := m.Invite
@@ -314,8 +303,6 @@ func (m CallModel) viewInvite(width int) string {
 	wrapped := wrap(grouped, max(16, width))
 
 	return lipgloss.JoinVertical(lipgloss.Left,
-		StyleMuted.Render("share with another worm client:"),
-		"",
 		lipgloss.NewStyle().Foreground(ColAccent2).Render(wrapped),
 		"",
 		StyleMuted.Render(fmt.Sprintf("%d bytes", len(code))),
@@ -328,7 +315,7 @@ func (m CallModel) viewControls() string {
 	for i, c := range controls {
 		rendered = append(rendered, button(c.label, m.focus == i, c.kind))
 	}
-	return lipgloss.JoinHorizontal(lipgloss.Center, strings.Join(rendered, "  "))
+	return lipgloss.JoinHorizontal(lipgloss.Center, strings.Join(rendered, " "))
 }
 
 func groupBlock(width int) int {

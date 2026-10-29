@@ -8,7 +8,12 @@ embedded TURN relay when it does not. The server never sees or relays media.
 - two ways to connect: a signaling server, or a manual SDP/ICE code exchange with no server
   at all;
 - PCM L16 audio over RTP (both ends are worm, so no Opus codec is needed);
+- a scarlet-on-black TUI that stays out of the way;
 - self-update and uninstall straight from the TUI.
+
+![Alt text](assets/main.png)
+![Alt text](assets/change_name.png)
+
 
 ## Quick start
 
