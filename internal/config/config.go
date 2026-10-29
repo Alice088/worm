@@ -24,6 +24,9 @@ type Config struct {
 	// Name is the display name shown to other peers.
 	Name string
 
+	// Server is the signaling server URL (http(s)://host:port).
+	Server string
+
 	// path is where the config was loaded from (and will be written to).
 	path string
 }
@@ -64,7 +67,7 @@ func loadFrom(path string) (Config, error) {
 		}
 		return cfg, err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	scanner := bufio.NewScanner(f)
 	line := 0
@@ -85,6 +88,8 @@ func loadFrom(path string) (Config, error) {
 		switch key {
 		case "name":
 			cfg.Name = value
+		case "server":
+			cfg.Server = value
 		}
 		// Unknown keys are ignored so newer files stay readable.
 	}
@@ -114,6 +119,9 @@ func (c Config) saveTo(path string) error {
 	b.WriteString("# worm config\n")
 	b.WriteString("# name: the display name other peers see\n")
 	fmt.Fprintf(&b, "name=%s\n", c.Name)
+	if c.Server != "" {
+		fmt.Fprintf(&b, "server=%s\n", c.Server)
+	}
 
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
@@ -126,17 +134,17 @@ func (c Config) saveTo(path string) error {
 	tmpName := tmp.Name()
 
 	if _, err := tmp.WriteString(b.String()); err != nil {
-		tmp.Close()
-		os.Remove(tmpName)
+		_ = tmp.Close()
+		_ = os.Remove(tmpName)
 		return err
 	}
 	if err := tmp.Close(); err != nil {
-		os.Remove(tmpName)
+		_ = os.Remove(tmpName)
 		return err
 	}
 
 	if err := os.Rename(tmpName, path); err != nil {
-		os.Remove(tmpName)
+		_ = os.Remove(tmpName)
 		return err
 	}
 	return nil
@@ -145,6 +153,12 @@ func (c Config) saveTo(path string) error {
 // WithName returns a copy of the config carrying the given name.
 func (c Config) WithName(name string) Config {
 	c.Name = strings.TrimSpace(name)
+	return c
+}
+
+// WithServer returns a copy of the config carrying the given server URL.
+func (c Config) WithServer(server string) Config {
+	c.Server = strings.TrimSpace(server)
 	return c
 }
 

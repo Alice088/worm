@@ -3,86 +3,137 @@ package pages
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
+	"github.com/Alice088/worm/internal/protocol"
 	"github.com/Alice088/worm/internal/session"
 )
 
-// CallAction is what the user asked for on the call screen.
 type CallAction int
 
 const (
-	// CallNone means "stay in the call".
 	CallNone CallAction = iota
-	// CallLeave hangs up and returns to the main screen.
+	CallAccept
+	CallReject
 	CallLeave
-	// CallToggleMute flips the local microphone.
 	CallToggleMute
-	// CallCopyConnectData copies the connect-data blob to the clipboard.
-	CallCopyConnectData
+	CallCopyInvite
 )
 
-// Participant is one member of the call.
-type Participant struct {
-	Name  string
-	Self  bool
-	Muted bool
-	// Speaking marks the audio-active peer, if known.
-	Speaking bool
-	// Connection is a short status label, e.g. "connected", "connecting".
-	Connection string
-}
-
-// control identifies a focusable control on the call screen.
-type control int
-
-const (
-	ctrlMute control = iota
-	ctrlCopy
-	ctrlLeave
-	ctrlCount
-)
-
-// CallModel is the "Call screen".
 type CallModel struct {
-	RoomName  string
-	Self      string
-	Muted     bool
-	Members   []Participant
-	Connect   string // hex connect-data blob
-	Connected bool
+	Room   string
+	Self   string
+	Peer   string
+	State  string
+	Role   string
+	Invite string
+	Muted  bool
+
+	Quality   string
+	Connected time.Time
 
 	W, H int
 
-	focus     control
-	copied    bool
+	focus     int
 	noticeOK  string
 	noticeErr string
 }
 
-// NewCall builds the call screen model.
-func NewCall(room, self, connectData string, connected bool) CallModel {
-	return CallModel{
-		RoomName:  room,
-		Self:      self,
-		Members:   []Participant{{Name: self, Self: true, Connection: "connected"}},
-		Connect:   connectData,
-		Connected: connected,
-		focus:     ctrlMute,
+func NewCall(self string) CallModel {
+	return CallModel{Self: self, State: "starting"}
+}
+
+func (m *CallModel) SetState(call protocol.CallStatePayload) {
+	m.Room = shortCallID(call.CallID)
+	m.State = call.State
+	m.Role = call.Role
+	m.Self = call.Self.Name
+	if call.Peer.Name != "" {
+		m.Peer = call.Peer.Name
+	}
+	if call.Invite != "" {
+		m.Invite = call.Invite
+	}
+	if call.Connected != nil {
+		m.Connected = *call.Connected
+	}
+	if m.focus >= len(m.controls()) {
+		m.focus = 0
 	}
 }
 
-// SetNotice records a status message shown under the controls. Exactly one of
-// ok/err should be non-empty; ok is rendered as success, err as an error.
+func (m *CallModel) SetQuality(text string) {
+	m.Quality = text
+}
+
 func (m *CallModel) SetNotice(ok, errMsg string) {
 	m.noticeOK = ok
 	m.noticeErr = errMsg
-	m.copied = ok != ""
 }
 
-// Update handles messages for the call screen.
+func (m *CallModel) SetError(errMsg string) {
+	m.noticeErr = errMsg
+	m.noticeOK = ""
+}
+
+func (m *CallModel) SetNoticeOK(msg string) {
+	m.noticeOK = msg
+	m.noticeErr = ""
+}
+
+func (m CallModel) Terminal() bool {
+	switch m.State {
+	case "ended", "rejected", "cancelled", "timeout", "failed":
+		return true
+	}
+	return false
+}
+
+type control struct {
+	label  string
+	kind   string
+	action CallAction
+}
+
+func (m CallModel) controls() []control {
+	if m.Terminal() {
+		return []control{{"Back to main", "default", CallLeave}}
+	}
+
+	switch m.State {
+	case "", "starting":
+		return []control{{"Cancel", "danger", CallLeave}}
+	case "ringing":
+		if m.Role == "callee" {
+			return []control{
+				{"Accept", "ok", CallAccept},
+				{"Reject", "danger", CallReject},
+			}
+		}
+		return []control{
+			{"Mute mic", "warn", CallToggleMute},
+			{"Copy invite", "ok", CallCopyInvite},
+			{"Cancel", "danger", CallLeave},
+		}
+	case "accepted", "connecting", "connected":
+		mute := "Mute mic"
+		if m.Muted {
+			mute = "Unmute mic"
+		}
+		list := []control{{mute, "warn", CallToggleMute}}
+		if m.Invite != "" {
+			list = append(list, control{"Copy invite", "ok", CallCopyInvite})
+		}
+		list = append(list, control{"End call", "danger", CallLeave})
+		return list
+	}
+
+	return []control{{"Back to main", "default", CallLeave}}
+}
+
 func (m CallModel) Update(msg tea.Msg) (CallModel, CallAction, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
@@ -90,38 +141,43 @@ func (m CallModel) Update(msg tea.Msg) (CallModel, CallAction, tea.Cmd) {
 		return m, CallNone, nil
 
 	case tea.KeyPressMsg:
+		controls := m.controls()
 		switch msg.String() {
 		case "left", "shift+tab", "h":
-			m.focus = (m.focus - 1 + ctrlCount) % ctrlCount
+			m.focus = (m.focus - 1 + len(controls)) % len(controls)
 			return m, CallNone, nil
 		case "right", "tab", "l":
-			m.focus = (m.focus + 1) % ctrlCount
+			m.focus = (m.focus + 1) % len(controls)
 			return m, CallNone, nil
 		case "m":
-			return m, CallToggleMute, nil
+			return m, m.actionFor(CallToggleMute), nil
 		case "c":
-			return m, CallCopyConnectData, nil
-		case "q":
-			return m, CallLeave, nil
+			return m, m.actionFor(CallCopyInvite), nil
+		case "a":
+			return m, m.actionFor(CallAccept), nil
+		case "r":
+			return m, m.actionFor(CallReject), nil
+		case "q", "esc":
+			return m, m.actionFor(CallLeave), nil
 		case "enter", "space":
-			return m.activate()
+			if len(controls) == 0 {
+				return m, CallNone, nil
+			}
+			return m, controls[m.focus].action, nil
 		}
 	}
 	return m, CallNone, nil
 }
 
-func (m CallModel) activate() (CallModel, CallAction, tea.Cmd) {
-	switch m.focus {
-	case ctrlLeave:
-		return m, CallLeave, nil
-	case ctrlCopy:
-		return m, CallCopyConnectData, nil
-	default:
-		return m, CallToggleMute, nil
+func (m CallModel) actionFor(action CallAction) CallAction {
+	for _, c := range m.controls() {
+		if c.action == action {
+			return action
+		}
 	}
+	return CallNone
 }
 
-// View renders the call screen.
 func (m CallModel) View() string {
 	w := m.W
 	if w <= 0 {
@@ -133,24 +189,26 @@ func (m CallModel) View() string {
 	header := lipgloss.JoinHorizontal(lipgloss.Left,
 		StyleTitle.Render(" CALL "),
 		" ",
-		lipgloss.NewStyle().Bold(true).Foreground(ColText).Render(m.RoomName),
+		lipgloss.NewStyle().Bold(true).Foreground(ColText).Render(m.Room),
 		"  ",
-		m.statusBadge(),
+		m.badge(),
 	)
 
-	participants := m.panel("PARTICIPANTS  ("+fmt.Sprint(len(m.Members))+")", m.viewMembers(), colW)
-	connect := m.panel("CONNECT-DATA", m.viewConnect(colW-4), colW)
-
-	body := lipgloss.JoinHorizontal(lipgloss.Top, participants, " ", connect)
+	participants := m.panel("PARTICIPANTS", m.viewMembers(), colW)
+	invite := m.panel("INVITE", m.viewInvite(colW-4), colW)
+	body := lipgloss.JoinHorizontal(lipgloss.Top, participants, " ", invite)
 
 	parts := []string{header, "", body, "", m.viewControls()}
+	if m.Quality != "" {
+		parts = append(parts, "", StyleMuted.Render(m.Quality))
+	}
 	switch {
 	case m.noticeErr != "":
 		parts = append(parts, "", StyleError.Render("✗ "+m.noticeErr))
 	case m.noticeOK != "":
 		parts = append(parts, "", StyleOK.Render("✓ "+m.noticeOK))
 	}
-	parts = append(parts, "", StyleHint.Render("←/→ move · enter activate · m mute · c copy · q leave"))
+	parts = append(parts, "", StyleHint.Render(m.hint()))
 
 	view := lipgloss.JoinVertical(lipgloss.Left, parts...)
 	if m.W > 0 && m.H > 0 {
@@ -159,11 +217,40 @@ func (m CallModel) View() string {
 	return view
 }
 
-func (m CallModel) statusBadge() string {
-	if m.Connected {
-		return lipgloss.NewStyle().Foreground(ColOK).Render("● connected")
+func (m CallModel) hint() string {
+	switch m.State {
+	case "ringing":
+		if m.Role == "callee" {
+			return "a accept · r reject · q leave"
+		}
+		return "share the invite code · c copy · q cancel"
+	case "accepted", "connecting", "connected":
+		return "←/→ move · enter activate · m mute · q end"
+	default:
+		if m.Terminal() {
+			return "q back to main"
+		}
+		return "q cancel"
 	}
-	return lipgloss.NewStyle().Foreground(ColWarn).Render("◌ connecting…")
+}
+
+func (m CallModel) badge() string {
+	label := m.State
+	if label == "" {
+		label = "starting"
+	}
+	var color = ColWarn
+	switch m.State {
+	case "connected":
+		color = ColOK
+	case "accepted", "connecting":
+		color = ColWarn
+	case "ended", "rejected", "cancelled", "timeout", "failed":
+		color = ColDanger
+	case "ringing":
+		color = ColAccent2
+	}
+	return lipgloss.NewStyle().Foreground(color).Render("● " + label)
 }
 
 func (m CallModel) panel(title, body string, w int) string {
@@ -178,86 +265,72 @@ func (m CallModel) panel(title, body string, w int) string {
 }
 
 func (m CallModel) viewMembers() string {
-	if len(m.Members) == 0 {
-		return StyleMuted.Render("nobody here yet")
-	}
+	rows := []string{m.memberRow(m.Self, true)}
 
-	rows := make([]string, 0, len(m.Members))
-	for _, p := range m.Members {
-		mic := lipgloss.NewStyle().Foreground(ColOK).Render("🎙")
-		if p.Muted {
-			mic = lipgloss.NewStyle().Foreground(ColDanger).Render("🔇")
+	switch m.State {
+	case "ringing", "accepted", "connecting", "connected", "ended":
+		peer := m.Peer
+		if peer == "" {
+			peer = "waiting for peer…"
 		}
-
-		name := p.Name
-		if p.Speaking {
-			name = lipgloss.NewStyle().Bold(true).Foreground(ColAccent2).Render(name)
-		} else {
-			name = lipgloss.NewStyle().Foreground(ColText).Render(name)
+		rows = append(rows, m.memberRow(peer, false))
+	default:
+		if m.Peer != "" {
+			rows = append(rows, m.memberRow(m.Peer, false))
 		}
-
-		suffix := ""
-		if p.Self {
-			suffix = StyleMuted.Render(" (you)")
-		}
-
-		status := ""
-		if p.Connection != "" && !p.Self {
-			status = " " + StyleMuted.Render("· "+p.Connection)
-		}
-
-		rows = append(rows, " "+mic+" "+name+suffix+status)
 	}
 	return lipgloss.JoinVertical(lipgloss.Left, rows...)
 }
 
-func (m CallModel) viewConnect(width int) string {
-	if m.Connect == "" {
-		return StyleMuted.Render("no connect-data yet —\nwaiting for the peer connection")
+func (m CallModel) memberRow(name string, self bool) string {
+	mic := lipgloss.NewStyle().Foreground(ColOK).Render("🎙")
+	if self && m.Muted {
+		mic = lipgloss.NewStyle().Foreground(ColDanger).Render("🔇")
 	}
 
-	grouped := session.Group(m.Connect, groupBlock(width))
-	// Soft-wrap inside the panel so long blobs stay readable.
+	label := lipgloss.NewStyle().Foreground(ColText).Render(name)
+	suffix := ""
+	if self {
+		suffix = StyleMuted.Render(" (you)")
+	}
+
+	status := ""
+	if !self && m.State != "" {
+		status = " " + StyleMuted.Render("· "+m.State)
+	}
+	return " " + mic + " " + label + suffix + status
+}
+
+func (m CallModel) viewInvite(width int) string {
+	if m.Invite == "" {
+		if m.State == "ringing" && m.Role == "callee" {
+			return StyleMuted.Render("invite accepted, waiting for caller")
+		}
+		return StyleMuted.Render("no invite yet")
+	}
+
+	code := m.Invite
+	grouped := session.Group(code, groupBlock(width))
 	wrapped := wrap(grouped, max(16, width))
 
-	lines := []string{
-		StyleMuted.Render("share with another client to join:"),
+	return lipgloss.JoinVertical(lipgloss.Left,
+		StyleMuted.Render("share with another worm client:"),
 		"",
 		lipgloss.NewStyle().Foreground(ColAccent2).Render(wrapped),
 		"",
-	}
-	if m.copied {
-		lines = append(lines, StyleOK.Render("copied to clipboard"))
-	} else {
-		lines = append(lines, StyleMuted.Render(fmt.Sprintf("%d bytes", len(m.Connect))))
-	}
-	return lipgloss.JoinVertical(lipgloss.Left, lines...)
+		StyleMuted.Render(fmt.Sprintf("%d bytes", len(code))),
+	)
 }
 
 func (m CallModel) viewControls() string {
-	muteLabel := "Mute mic"
-	if m.Muted {
-		muteLabel = "Unmute mic"
+	controls := m.controls()
+	rendered := make([]string, 0, len(controls))
+	for i, c := range controls {
+		rendered = append(rendered, button(c.label, m.focus == i, c.kind))
 	}
-
-	btns := []struct {
-		label string
-		kind  string
-		idx   control
-	}{
-		{muteLabel, "warn", ctrlMute},
-		{"Copy connect-data", "ok", ctrlCopy},
-		{"Leave", "danger", ctrlLeave},
-	}
-
-	rendered := make([]string, 0, len(btns))
-	for _, b := range btns {
-		rendered = append(rendered, button(b.label, m.focus == b.idx, b.kind))
-	}
-	return lipgloss.JoinHorizontal(lipgloss.Center, rendered[0], "  ", rendered[1], "  ", rendered[2])
+	return lipgloss.JoinHorizontal(lipgloss.Center, strings.Join(rendered, "  "))
 }
 
-// groupBlock picks a hex group size that fits the available width.
 func groupBlock(width int) int {
 	for _, n := range []int{16, 8, 4} {
 		if n <= width {
@@ -267,9 +340,6 @@ func groupBlock(width int) int {
 	return 2
 }
 
-// wrap word-wraps s into lines no wider than width, breaking on spaces. The
-// connect-data blob uses spaces solely as visual group separators, so breaking
-// there keeps the hex readable and still decodable.
 func wrap(s string, width int) string {
 	if width <= 0 {
 		return s
@@ -288,7 +358,6 @@ func wrap(s string, width int) string {
 				col++
 			}
 		}
-		// A single word longer than the line is hard-broken.
 		for len(w) > width {
 			b.WriteString(w[:width])
 			b.WriteByte('\n')
@@ -299,4 +368,11 @@ func wrap(s string, width int) string {
 		col += len(w)
 	}
 	return b.String()
+}
+
+func shortCallID(id string) string {
+	if len(id) <= 8 {
+		return id
+	}
+	return id[:8]
 }

@@ -38,6 +38,23 @@ func TestSaveThenLoadRoundTrip(t *testing.T) {
 	}
 }
 
+func TestSaveThenLoadServer(t *testing.T) {
+	path := filepath.Join(t.TempDir(), FileName)
+
+	cfg := Config{}.WithName("alice").WithServer("http://localhost:8080")
+	if err := cfg.SaveTo(path); err != nil {
+		t.Fatalf("SaveTo: %v", err)
+	}
+
+	back, err := LoadFrom(path)
+	if err != nil {
+		t.Fatalf("LoadFrom: %v", err)
+	}
+	if back.Server != "http://localhost:8080" {
+		t.Fatalf("expected server to round-trip, got %q", back.Server)
+	}
+}
+
 func TestSaveIsAtomicAndOverwrites(t *testing.T) {
 	path := filepath.Join(t.TempDir(), FileName)
 

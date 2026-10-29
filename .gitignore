@@ -3,3 +3,7 @@
 
 # build output
 /worm
+
+# build output
+/bin
+.idea/
