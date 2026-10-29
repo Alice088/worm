@@ -47,8 +47,9 @@ stored in `~/.worm/config`.
 Everything stays editable later from the same menu: `3` changes the name, `6` the server,
 `4` checks for updates, `5` uninstalls.
 
-Live audio requires Linux with ALSA utilities (`arecord`, `aplay`). Without them the UI,
-signaling, and code exchange still work, but a call fails with an `audio device` error.
+Live audio uses PipeWire (`pw-record`/`pw-play`) or ALSA (`arecord`/`aplay`), whichever is
+installed. Without either, manual SDP/ICE calls still connect but run silent (the UI shows an
+audio warning); server calls end with an `audio device` error.
 
 ### Install management
 
@@ -160,7 +161,7 @@ internal/server        HTTP API, configuration, graceful shutdown, sweeper
 internal/client        HTTP registration and WebSocket client with reconnect
 internal/engine        WebRTC session: offer/answer, trickle ICE, RTP, stats, ICE restart;
                        Manual — the same media layer over hand-exchanged codes
-internal/audio         PCM capture/playback (arecord/aplay) + null devices for tests
+internal/audio         PCM capture/playback (PipeWire or ALSA backends) + null devices for tests
 internal/session       invite-code and SDP/ICE-code formats
 internal/tui           Bubble Tea UI (main screen, call screen, manual exchange)
 internal/updater       GitHub release lookup, download, atomic binary replacement
@@ -272,8 +273,8 @@ STUN defaults to `stun:stun.l.google.com:19302`. For relay, add a TURN server to
 
 ## Troubleshooting
 
-- `audio device` error — install ALSA utilities (`arecord`, `aplay`) and check the capture
-  device; signaling and manual exchange work without audio.
+- `audio device` error — install `pipewire` (`pw-record`/`pw-play`) or `alsa-utils`
+  (`arecord`/`aplay`) and check the capture device; manual calls keep working without sound.
 - `server not configured` — press `6` and paste the server URL, or set `server=` in
   `~/.worm/config` / `WORM_SERVER`.
 - Clipboard does not work (`c`) — worm uses `wl-copy`/`xclip`/`xsel`/`pbcopy`, then the

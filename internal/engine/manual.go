@@ -14,9 +14,12 @@ type Manual struct {
 	events chan Event
 
 	mu         sync.Mutex
+	opMu       sync.Mutex
 	peer       *peerSession
 	gathered   chan struct{}
 	candidates []string
+	local      session.Signal
+	audioWarn  sync.Once
 	closed     bool
 }
 
@@ -31,6 +34,16 @@ func NewManual(cfg Config) *Manual {
 func (m *Manual) Events() <-chan Event { return m.events }
 
 func (m *Manual) Offer(ctx context.Context) (session.Signal, error) {
+	m.opMu.Lock()
+	defer m.opMu.Unlock()
+
+	m.mu.Lock()
+	cached := m.local
+	m.mu.Unlock()
+	if cached.Kind == session.SignalOffer {
+		return cached, nil
+	}
+
 	peer, err := m.ensurePeer()
 	if err != nil {
 		return session.Signal{}, err
@@ -40,13 +53,29 @@ func (m *Manual) Offer(ctx context.Context) (session.Signal, error) {
 		return session.Signal{}, err
 	}
 	m.awaitGathering(ctx)
-	return session.Signal{Kind: session.SignalOffer, SDP: sdp, Candidates: m.takeCandidates()}, nil
+	sig := session.Signal{Kind: session.SignalOffer, SDP: sdp, Candidates: m.takeCandidates()}
+
+	m.mu.Lock()
+	m.local = sig
+	m.mu.Unlock()
+	return sig, nil
 }
 
 func (m *Manual) Answer(ctx context.Context, offer session.Signal) (session.Signal, error) {
 	if offer.Kind != session.SignalOffer {
 		return session.Signal{}, session.ErrSignalKind
 	}
+
+	m.opMu.Lock()
+	defer m.opMu.Unlock()
+
+	m.mu.Lock()
+	cached := m.local
+	m.mu.Unlock()
+	if cached.Kind == session.SignalAnswer {
+		return cached, nil
+	}
+
 	peer, err := m.ensurePeer()
 	if err != nil {
 		return session.Signal{}, err
@@ -59,7 +88,12 @@ func (m *Manual) Answer(ctx context.Context, offer session.Signal) (session.Sign
 		return session.Signal{}, err
 	}
 	m.awaitGathering(ctx)
-	return session.Signal{Kind: session.SignalAnswer, SDP: sdp, Candidates: m.takeCandidates()}, nil
+	sig := session.Signal{Kind: session.SignalAnswer, SDP: sdp, Candidates: m.takeCandidates()}
+
+	m.mu.Lock()
+	m.local = sig
+	m.mu.Unlock()
+	return sig, nil
 }
 
 func (m *Manual) Connect(answer session.Signal) error {
@@ -169,7 +203,9 @@ func (m *Manual) ensurePeer() (*peerSession, error) {
 			})
 		},
 		OnAudioError: func(err error) {
-			m.emit(Event{Kind: EventError, Code: protocol.CodeUnavailable, Message: "audio device: " + err.Error()})
+			m.audioWarn.Do(func() {
+				m.emit(Event{Kind: EventNotice, Message: err.Error() + " · continuing without sound"})
+			})
 		},
 	})
 	if err != nil {

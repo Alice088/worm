@@ -22,10 +22,11 @@ func newCodeInput(placeholder string, charLimit int) codeInput {
 	return codeInput{in: in, limit: codePreviewLimit}
 }
 
-func (c *codeInput) SetWidth(w int) { c.in.SetWidth(w) }
-func (c *codeInput) Focus() tea.Cmd { return c.in.Focus() }
-func (c *codeInput) Blur()          { c.in.Blur() }
-func (c *codeInput) Value() string  { return c.in.Value() }
+func (c *codeInput) SetWidth(w int)             { c.in.SetWidth(w) }
+func (c *codeInput) SetPlaceholder(text string) { c.in.Placeholder = text }
+func (c *codeInput) Focus() tea.Cmd             { return c.in.Focus() }
+func (c *codeInput) Blur()                      { c.in.Blur() }
+func (c *codeInput) Value() string              { return c.in.Value() }
 func (c *codeInput) SetValue(s string) {
 	c.in.SetValue(s)
 	c.syncMode()

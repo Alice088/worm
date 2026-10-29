@@ -4,7 +4,7 @@
 
 Новый прогон добавляется сверху, сразу под этим разделом. Формат заголовка: `## Прогон: YYYY-MM-DD HH:MM TZ (±HHMM)`. Результаты — только таблицей; после таблицы обязательны `### Сводка` и `### Падения`.
 
-## Прогон: 2026-10-29 23:14 MSK (+0300)
+## Прогон: 2026-10-29 23:48 MSK (+0300)
 
 Команда: `go test ./... -count=1 -race -v -timeout 600s`  
 Go: `go1.27.1 linux/amd64`  
@@ -54,7 +54,7 @@ Go: `go1.27.1 linux/amd64`
 | 40 | TestEndToEndCallWithMedia | internal/engine | SKIP | 0.00s |
 | 41 | TestCallRejectNotifiesCaller | internal/engine | PASS | 0.03s |
 | 42 | TestCallerCancelNotifiesCallee | internal/engine | PASS | 0.04s |
-| 43 | TestUnauthorizedCallIsRejectedByServer | internal/engine | PASS | 0.02s |
+| 43 | TestUnauthorizedCallIsRejectedByServer | internal/engine | PASS | 0.03s |
 | 44 | TestEngineRequiresConnection | internal/engine | PASS | 0.00s |
 | 45 | TestDirDefaultsToHome | internal/home | PASS | 0.00s |
 | 46 | TestWormHomeOverride | internal/home | PASS | 0.00s |
@@ -109,7 +109,7 @@ Go: `go1.27.1 linux/amd64`
 | 95 | TestReconnectGraceFailsCall | internal/signaling | PASS | 0.31s |
 | 96 | TestRateLimitReturnsError | internal/signaling | PASS | 0.00s |
 | 97 | TestMalformedMessageReturnsError | internal/signaling | PASS | 0.00s |
-| 98 | TestRecoverReturnsCurrentState | internal/signaling | PASS | 0.00s |
+| 98 | TestRecoverReturnsCurrentState | internal/signaling | PASS | 0.01s |
 | 99 | TestMainScreenShowsActionsAndServer | internal/tui | PASS | 0.00s |
 | 100 | TestCreateFlowStartsEngine | internal/tui | PASS | 0.00s |
 | 101 | TestJoinFlowAcceptsIncomingCall | internal/tui | PASS | 0.02s |
@@ -138,7 +138,7 @@ Go: `go1.27.1 linux/amd64`
 - PASS: 118
 - FAIL: 0
 - SKIP: 1
-- Время: суммарное время пакетов ≈ 0.71s
+- Время: суммарное время пакетов ≈ 0.73s
 
 ### Падения
 
@@ -146,7 +146,7 @@ Go: `go1.27.1 linux/amd64`
 
 Пропуск: `TestEndToEndCallWithMedia` под `-race` — DTLS-хендшейк под инструментацией не укладывается в ICE-таймеры; медиа-путь покрыт прогоном без `-race`.
 
-## Прогон: 2026-10-29 23:14 MSK (+0300)
+## Прогон: 2026-10-29 23:48 MSK (+0300)
 
 Команда: `go test ./... -count=1 -v -timeout 300s`  
 Go: `go1.27.1 linux/amd64`  
@@ -193,7 +193,7 @@ Go: `go1.27.1 linux/amd64`
 | 37 | TestValidateNameEmptyReportsErrNoName | internal/config | PASS | 0.00s |
 | 38 | TestDefaultPathUsesWormHome | internal/config | PASS | 0.00s |
 | 39 | TestDefaultPathIsIndependentOfWorkingDir | internal/config | PASS | 0.00s |
-| 40 | TestEndToEndCallWithMedia | internal/engine | PASS | 1.48s |
+| 40 | TestEndToEndCallWithMedia | internal/engine | PASS | 0.25s |
 | 41 | TestCallRejectNotifiesCaller | internal/engine | PASS | 0.02s |
 | 42 | TestCallerCancelNotifiesCallee | internal/engine | PASS | 0.03s |
 | 43 | TestUnauthorizedCallIsRejectedByServer | internal/engine | PASS | 0.02s |
@@ -280,7 +280,7 @@ Go: `go1.27.1 linux/amd64`
 - PASS: 119
 - FAIL: 0
 - SKIP: 0
-- Время: суммарное время пакетов ≈ 2.10s
+- Время: суммарное время пакетов ≈ 0.87s
 
 ### Падения
 

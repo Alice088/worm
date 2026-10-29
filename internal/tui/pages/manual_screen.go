@@ -13,7 +13,9 @@ type ManualStage int
 const (
 	ManualChoose ManualStage = iota
 	ManualPasteOffer
+	ManualOfferReady
 	ManualAwaitAnswer
+	ManualAnswerReady
 	ManualAwaitConnect
 	ManualConnected
 )
@@ -30,6 +32,9 @@ const (
 	ManualSave
 	ManualToggleMute
 	ManualLeave
+	ManualPasteAnswer
+	ManualPasteCandidates
+	ManualBack
 )
 
 type manualButton struct {
@@ -65,6 +70,15 @@ func NewManual(self string) ManualModel {
 
 func (m *ManualModel) SetStage(stage ManualStage) {
 	m.Stage = stage
+	m.focus = 0
+	switch stage {
+	case ManualPasteOffer:
+		m.input.SetPlaceholder("paste offer code")
+	case ManualAwaitAnswer:
+		m.input.SetPlaceholder("paste answer code")
+	case ManualAwaitConnect:
+		m.input.SetPlaceholder("paste candidates")
+	}
 	if m.acceptsInput() {
 		_ = m.input.Focus()
 	} else {
@@ -119,19 +133,33 @@ func (m ManualModel) buttons() []manualButton {
 	case ManualPasteOffer:
 		return []manualButton{
 			{"Generate answer", "ok", ManualAnswerOffer},
-			{"Back", "default", ManualLeave},
+			{"Back", "default", ManualBack},
+		}
+	case ManualOfferReady:
+		return []manualButton{
+			{"Copy offer", "ok", ManualCopy},
+			{"Save offer", "default", ManualSave},
+			{"Paste answer", "warn", ManualPasteAnswer},
+			{"Cancel", "danger", ManualLeave},
 		}
 	case ManualAwaitAnswer:
 		return []manualButton{
-			{"Copy my offer", "ok", ManualCopy},
-			{"Connect", "warn", ManualApplyAnswer},
+			{"Apply answer", "ok", ManualApplyAnswer},
+			{"Copy offer", "default", ManualCopy},
+			{"Back", "default", ManualBack},
+		}
+	case ManualAnswerReady:
+		return []manualButton{
+			{"Copy answer", "ok", ManualCopy},
+			{"Save answer", "default", ManualSave},
+			{"Paste candidates", "warn", ManualPasteCandidates},
 			{"Cancel", "danger", ManualLeave},
 		}
 	case ManualAwaitConnect:
 		return []manualButton{
-			{"Copy my answer", "ok", ManualCopy},
-			{"Add candidates", "warn", ManualAddCandidates},
-			{"Cancel", "danger", ManualLeave},
+			{"Apply candidates", "ok", ManualAddCandidates},
+			{"Copy answer", "default", ManualCopy},
+			{"Back", "default", ManualBack},
 		}
 	default:
 		mute := "Mute mic"
@@ -162,25 +190,29 @@ func (m ManualModel) Update(msg tea.Msg) (ManualModel, ManualAction, string, tea
 			m.focus = (m.focus + 1) % len(buttons)
 			return m, ManualNone, "", nil
 		case "c":
-			if m.Code != "" {
+			if !m.acceptsInput() && m.Code != "" {
 				return m, ManualCopy, m.Code, nil
 			}
-			return m, ManualNone, "", nil
 		case "s":
-			if m.Code != "" {
+			if !m.acceptsInput() && m.Code != "" {
 				return m, ManualSave, m.Code, nil
 			}
-			return m, ManualNone, "", nil
 		case "m":
 			if m.Stage == ManualConnected {
 				return m, ManualToggleMute, "", nil
 			}
 		case "esc":
-			if m.Stage == ManualPasteOffer {
+			switch m.Stage {
+			case ManualPasteOffer:
 				m.SetStage(ManualChoose)
-				return m, ManualNone, "", nil
+			case ManualAwaitAnswer:
+				m.SetStage(ManualOfferReady)
+			case ManualAwaitConnect:
+				m.SetStage(ManualAnswerReady)
+			default:
+				return m, ManualLeave, "", nil
 			}
-			return m, ManualLeave, "", nil
+			return m, ManualNone, "", nil
 		case "q":
 			if !m.acceptsInput() {
 				return m, ManualLeave, "", nil
@@ -192,7 +224,11 @@ func (m ManualModel) Update(msg tea.Msg) (ManualModel, ManualAction, string, tea
 					m.SetStage(ManualPasteOffer)
 					return m, ManualNone, "", nil
 				}
-				return m, btn.action, strings.TrimSpace(m.input.Value()), nil
+				data := strings.TrimSpace(m.input.Value())
+				if btn.action == ManualCopy || btn.action == ManualSave {
+					data = m.Code
+				}
+				return m, btn.action, data, nil
 			}
 		}
 
@@ -274,9 +310,9 @@ func clipHeight(s string, height int) string {
 
 func (m ManualModel) stepTitle() string {
 	switch m.Stage {
-	case ManualPasteOffer:
+	case ManualPasteOffer, ManualOfferReady:
 		return "OFFER"
-	case ManualAwaitAnswer:
+	case ManualAwaitAnswer, ManualAnswerReady:
 		return "ANSWER"
 	case ManualAwaitConnect:
 		return "WAITING"
@@ -296,11 +332,18 @@ func (m ManualModel) codeBlock(width int) string {
 		lipgloss.NewStyle().Foreground(ColAccent2).Render(preview),
 		StyleMuted.Render(fmt.Sprintf("%d bytes", len(m.Code))),
 		"",
-		StyleHint.Render("c copy · s save"),
+		StyleHint.Render(m.copyHint()),
 	)
 	return lipgloss.NewStyle().
 		Width(max(20, width)).
 		Render(body)
+}
+
+func (m ManualModel) copyHint() string {
+	if m.acceptsInput() {
+		return "esc back · copies above"
+	}
+	return "c copy · s save"
 }
 
 func (m ManualModel) fieldBlock(width int) string {
@@ -333,12 +376,10 @@ func (m ManualModel) viewButtons() string {
 
 func (m ManualModel) hint() string {
 	switch m.Stage {
-	case ManualPasteOffer:
-		return "enter · esc"
-	case ManualAwaitAnswer:
+	case ManualPasteOffer, ManualAwaitAnswer, ManualAwaitConnect:
+		return "enter apply · esc back"
+	case ManualOfferReady, ManualAnswerReady:
 		return "c · s · enter"
-	case ManualAwaitConnect:
-		return "c · s"
 	case ManualConnected:
 		return "m · q"
 	default:

@@ -501,7 +501,7 @@ func (m Model) handleManualCode(msg manualCodeMsg) (tea.Model, tea.Cmd) {
 	}
 	m.manualUI.SetCode(msg.code)
 	m.manualUI.SetStage(msg.stage)
-	if msg.stage == pages.ManualAwaitAnswer {
+	if msg.stage == pages.ManualOfferReady {
 		m.manualUI.SetStatus("offer ready")
 		m.manualUI.SetNotice("send your offer code to the peer, then paste the answer")
 	} else {
@@ -566,7 +566,7 @@ func (m Model) updateManual(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return manualCodeMsg{err: err}
 			}
 			code, err := sig.Encode()
-			return manualCodeMsg{code: code, stage: pages.ManualAwaitAnswer, err: err}
+			return manualCodeMsg{code: code, stage: pages.ManualOfferReady, err: err}
 		}
 
 	case pages.ManualAnswerOffer:
@@ -582,7 +582,7 @@ func (m Model) updateManual(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return manualCodeMsg{err: err}
 			}
 			code, err := answer.Encode()
-			return manualCodeMsg{code: code, stage: pages.ManualAwaitConnect, err: err}
+			return manualCodeMsg{code: code, stage: pages.ManualAnswerReady, err: err}
 		}
 
 	case pages.ManualApplyAnswer:
@@ -602,6 +602,27 @@ func (m Model) updateManual(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return manualDoneMsg{err: manual.AddCandidates(code)}
 		}
+
+	case pages.ManualPasteAnswer:
+		m.manualUI.SetStage(pages.ManualAwaitAnswer)
+		return m, nil
+
+	case pages.ManualPasteCandidates:
+		m.manualUI.SetStage(pages.ManualAwaitConnect)
+		return m, nil
+
+	case pages.ManualBack:
+		switch m.manualUI.Stage {
+		case pages.ManualPasteOffer:
+			m.manualUI.SetStage(pages.ManualChoose)
+		case pages.ManualAwaitAnswer:
+			m.manualUI.SetStage(pages.ManualOfferReady)
+		case pages.ManualAwaitConnect:
+			m.manualUI.SetStage(pages.ManualAnswerReady)
+		default:
+			m.manualUI.SetStage(pages.ManualChoose)
+		}
+		return m, nil
 
 	case pages.ManualToggleMute:
 		m.manualUI.Muted = !m.manualUI.Muted

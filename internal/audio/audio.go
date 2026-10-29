@@ -32,8 +32,19 @@ type Opener struct {
 
 var Default = Opener{Source: openSource, Sink: openSink}
 
-func deviceArgs() []string {
+func alsaArgs() []string {
 	return []string{"-q", "-t", "raw", "-f", "S16_LE", "-r", "48000", "-c", "1", "-"}
+}
+
+func pipewireArgs() []string {
+	return []string{"--rate", "48000", "--channels", "1", "--format", "s16", "--raw", "-"}
+}
+
+func backendArgs(tool string) []string {
+	if tool == "pw-record" || tool == "pw-play" {
+		return pipewireArgs()
+	}
+	return alsaArgs()
 }
 
 type execSource struct {
@@ -43,10 +54,20 @@ type execSource struct {
 }
 
 func openSource() (Source, error) {
-	if _, err := exec.LookPath("arecord"); err != nil {
-		return nil, fmt.Errorf("audio capture unavailable: arecord not found")
+	for _, tool := range []string{"pw-record", "arecord"} {
+		if _, err := exec.LookPath(tool); err != nil {
+			continue
+		}
+		src, err := startSource(tool)
+		if err == nil {
+			return src, nil
+		}
 	}
-	cmd := exec.Command("arecord", deviceArgs()...)
+	return nil, fmt.Errorf("audio capture unavailable: install pipewire or alsa-utils")
+}
+
+func startSource(tool string) (*execSource, error) {
+	cmd := exec.Command(tool, backendArgs(tool)...)
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		return nil, err
@@ -77,10 +98,20 @@ type execSink struct {
 }
 
 func openSink() (Sink, error) {
-	if _, err := exec.LookPath("aplay"); err != nil {
-		return nil, fmt.Errorf("audio playback unavailable: aplay not found")
+	for _, tool := range []string{"pw-play", "aplay"} {
+		if _, err := exec.LookPath(tool); err != nil {
+			continue
+		}
+		sink, err := startSink(tool)
+		if err == nil {
+			return sink, nil
+		}
 	}
-	cmd := exec.Command("aplay", deviceArgs()...)
+	return nil, fmt.Errorf("audio playback unavailable: install pipewire or alsa-utils")
+}
+
+func startSink(tool string) (*execSink, error) {
+	cmd := exec.Command(tool, backendArgs(tool)...)
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
 		return nil, err
