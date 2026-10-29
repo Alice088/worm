@@ -383,6 +383,9 @@ func (m Model) updateMain(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case pages.ActionRename:
 		return m.rename(data), cmd
 
+	case pages.ActionSetServer:
+		return m.setServer(data), cmd
+
 	case pages.ActionCheckUpdate:
 		return m, checkUpdate()
 
@@ -395,6 +398,24 @@ func (m Model) updateMain(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	return m, cmd
+}
+
+func (m Model) setServer(server string) Model {
+	updated := m.cfg.WithServer(server)
+	if err := updated.Save(); err != nil {
+		m.main.SetFailure("cannot save " + config.FileName + ": " + err.Error())
+		return m
+	}
+
+	m.cfg = updated
+	m.server = server
+	m.main.SetServer(server)
+	if server == "" {
+		m.main.SetNotice("server cleared — manual exchange works without one")
+	} else {
+		m.main.SetNotice("server saved to " + updated.Path())
+	}
+	return m
 }
 
 func (m Model) rename(name string) Model {

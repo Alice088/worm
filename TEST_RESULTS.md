@@ -4,7 +4,7 @@
 
 Новый прогон добавляется сверху, сразу под этим разделом. Формат заголовка: `## Прогон: YYYY-MM-DD HH:MM TZ (±HHMM)`. Результаты — только таблицей; после таблицы обязательны `### Сводка` и `### Падения`.
 
-## Прогон: 2026-10-29 22:51 MSK (+0300)
+## Прогон: 2026-10-29 22:53 MSK (+0300)
 
 Команда: `go test ./... -count=1 -race -v -timeout 600s`  
 Go: `go1.27.1 linux/amd64`  
@@ -54,7 +54,7 @@ Go: `go1.27.1 linux/amd64`
 | 40 | TestEndToEndCallWithMedia | internal/engine | SKIP | 0.00s |
 | 41 | TestCallRejectNotifiesCaller | internal/engine | PASS | 0.03s |
 | 42 | TestCallerCancelNotifiesCallee | internal/engine | PASS | 0.04s |
-| 43 | TestUnauthorizedCallIsRejectedByServer | internal/engine | PASS | 0.02s |
+| 43 | TestUnauthorizedCallIsRejectedByServer | internal/engine | PASS | 0.03s |
 | 44 | TestEngineRequiresConnection | internal/engine | PASS | 0.00s |
 | 45 | TestDirDefaultsToHome | internal/home | PASS | 0.00s |
 | 46 | TestWormHomeOverride | internal/home | PASS | 0.00s |
@@ -75,7 +75,7 @@ Go: `go1.27.1 linux/amd64`
 | 61 | TestErrorPayloadPreservesRequestID | internal/protocol | PASS | 0.00s |
 | 62 | TestDecodeRejectsInvalidRequestIDCharacters | internal/protocol | PASS | 0.00s |
 | 63 | TestCallStateDeadlineEncoding | internal/protocol | PASS | 0.00s |
-| 64 | TestSessionEndpointIssuesTokenAndIceServers | internal/server | PASS | 0.00s |
+| 64 | TestSessionEndpointIssuesTokenAndIceServers | internal/server | PASS | 0.01s |
 | 65 | TestSessionEndpointRejectsInvalidName | internal/server | PASS | 0.00s |
 | 66 | TestSessionRateLimit | internal/server | PASS | 0.00s |
 | 67 | TestTurnCredentialsEndpoint | internal/server | PASS | 0.00s |
@@ -97,8 +97,8 @@ Go: `go1.27.1 linux/amd64`
 | 83 | TestInviteValidation | internal/session | PASS | 0.00s |
 | 84 | TestGroup | internal/session | PASS | 0.00s |
 | 85 | TestRandomID | internal/session | PASS | 0.00s |
-| 86 | TestUnauthorizedConnectionRejected | internal/signaling | PASS | 0.00s |
-| 87 | TestCreateCallReturnsRingingState | internal/signaling | PASS | 0.01s |
+| 86 | TestUnauthorizedConnectionRejected | internal/signaling | PASS | 0.01s |
+| 87 | TestCreateCallReturnsRingingState | internal/signaling | PASS | 0.00s |
 | 88 | TestFullSignalingFlow | internal/signaling | PASS | 0.01s |
 | 89 | TestSignalingRequiresMembership | internal/signaling | PASS | 0.01s |
 | 90 | TestDuplicateCreateIsIdempotent | internal/signaling | PASS | 0.00s |
@@ -110,12 +110,12 @@ Go: `go1.27.1 linux/amd64`
 | 96 | TestRateLimitReturnsError | internal/signaling | PASS | 0.00s |
 | 97 | TestMalformedMessageReturnsError | internal/signaling | PASS | 0.00s |
 | 98 | TestRecoverReturnsCurrentState | internal/signaling | PASS | 0.00s |
-| 99 | TestMainScreenShowsActionsAndServer | internal/tui | PASS | 0.01s |
+| 99 | TestMainScreenShowsActionsAndServer | internal/tui | PASS | 0.00s |
 | 100 | TestCreateFlowStartsEngine | internal/tui | PASS | 0.00s |
 | 101 | TestJoinFlowAcceptsIncomingCall | internal/tui | PASS | 0.02s |
 | 102 | TestJoinRejectsBadInvite | internal/tui | PASS | 0.00s |
 | 103 | TestMissingServerIsReported | internal/tui | PASS | 0.01s |
-| 104 | TestRegisterFailureIsShown | internal/tui | PASS | 0.00s |
+| 104 | TestRegisterFailureIsShown | internal/tui | PASS | 0.01s |
 | 105 | TestMuteAndLeave | internal/tui | PASS | 0.00s |
 | 106 | TestLeaveWhileRingingCancels | internal/tui | PASS | 0.00s |
 | 107 | TestRejectFromIncomingCall | internal/tui | PASS | 0.00s |
@@ -128,7 +128,7 @@ Go: `go1.27.1 linux/amd64`
 | 114 | TestIssueCredentials | internal/turnserver | PASS | 0.00s |
 | 115 | TestAuthHandlerAcceptsValidUsername | internal/turnserver | PASS | 0.00s |
 | 116 | TestAuthHandlerRejectsExpiredAndMalformed | internal/turnserver | PASS | 0.00s |
-| 117 | TestServerAllocatesRelay | internal/turnserver | PASS | 0.01s |
+| 117 | TestServerAllocatesRelay | internal/turnserver | PASS | 0.00s |
 | 118 | TestServerRejectsBadPassword | internal/turnserver | PASS | 0.01s |
 | 119 | TestStartRejectsBadSecret | internal/turnserver | PASS | 0.00s |
 
@@ -138,7 +138,7 @@ Go: `go1.27.1 linux/amd64`
 - PASS: 118
 - FAIL: 0
 - SKIP: 1
-- Время: суммарное время пакетов ≈ 0.76s
+- Время: суммарное время пакетов ≈ 0.77s
 
 ### Падения
 
@@ -146,7 +146,7 @@ Go: `go1.27.1 linux/amd64`
 
 Пропуск: `TestEndToEndCallWithMedia` под `-race` — DTLS-хендшейк под инструментацией не укладывается в ICE-таймеры; медиа-путь покрыт прогоном без `-race`.
 
-## Прогон: 2026-10-29 22:51 MSK (+0300)
+## Прогон: 2026-10-29 22:53 MSK (+0300)
 
 Команда: `go test ./... -count=1 -v -timeout 300s`  
 Go: `go1.27.1 linux/amd64`  
@@ -193,7 +193,7 @@ Go: `go1.27.1 linux/amd64`
 | 37 | TestValidateNameEmptyReportsErrNoName | internal/config | PASS | 0.00s |
 | 38 | TestDefaultPathUsesWormHome | internal/config | PASS | 0.00s |
 | 39 | TestDefaultPathIsIndependentOfWorkingDir | internal/config | PASS | 0.00s |
-| 40 | TestEndToEndCallWithMedia | internal/engine | PASS | 1.05s |
+| 40 | TestEndToEndCallWithMedia | internal/engine | PASS | 1.64s |
 | 41 | TestCallRejectNotifiesCaller | internal/engine | PASS | 0.02s |
 | 42 | TestCallerCancelNotifiesCallee | internal/engine | PASS | 0.03s |
 | 43 | TestUnauthorizedCallIsRejectedByServer | internal/engine | PASS | 0.02s |
@@ -280,7 +280,7 @@ Go: `go1.27.1 linux/amd64`
 - PASS: 119
 - FAIL: 0
 - SKIP: 0
-- Время: суммарное время пакетов ≈ 1.67s
+- Время: суммарное время пакетов ≈ 2.26s
 
 ### Падения
 

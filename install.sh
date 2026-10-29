@@ -7,6 +7,7 @@ VERSION="${WORM_VERSION:-latest}"
 ACTION="install"
 PURGE=0
 YES=0
+ADD_PATH=1
 
 usage() {
 	cat <<'EOF'
@@ -23,6 +24,7 @@ Options:
   --purge               with --uninstall also remove ~/.worm config
   --version TAG         install a specific release tag (e.g. v1.2.3)
   --dir DIR             install directory (default: ~/.local/bin)
+  --no-path             do not add the install directory to the shell rc
   --yes, -y             do not ask for confirmation
   -h, --help            show this help
 EOF
@@ -39,6 +41,7 @@ while [ $# -gt 0 ]; do
 		--version) [ $# -ge 2 ] || fail "--version needs a tag"; VERSION="$2"; shift 2 ;;
 		--dir) [ $# -ge 2 ] || fail "--dir needs a path"; BIN_DIR="$2"; shift 2 ;;
 		--yes|-y) YES=1; shift ;;
+		--no-path) ADD_PATH=0; shift ;;
 		-h|--help) usage; exit 0 ;;
 		*) fail "unknown option: $1 (see --help)" ;;
 	esac
@@ -138,11 +141,31 @@ install_release() {
 		log "installed $bin_dir_expanded/worm-server"
 	fi
 
-	case ":$PATH:" in
-		*":$bin_dir_expanded:"*) ;;
-		*) log "add $bin_dir_expanded to PATH: export PATH=\"$bin_dir_expanded:\$PATH\"" ;;
-	esac
+	ensure_path
 	log "run: worm"
+}
+
+shell_rc() {
+	case "${SHELL##*/}" in
+		zsh) printf '%s\n' "$HOME/.zshrc" ;;
+		bash) printf '%s\n' "$HOME/.bashrc" ;;
+		*) printf '%s\n' "$HOME/.profile" ;;
+	esac
+}
+
+ensure_path() {
+	case ":$PATH:" in
+		*":$bin_dir_expanded:"*) return 0 ;;
+	esac
+	[ "$ADD_PATH" -eq 1 ] || return 0
+	local rc
+	rc="$(shell_rc)"
+	grep -qsF 'worm installer' "$rc" && return 0
+	if printf '\n# worm installer\nexport PATH="%s:$PATH"\n' "$bin_dir_expanded" >>"$rc" 2>/dev/null; then
+		log "added $bin_dir_expanded to PATH in $rc (restart the shell or source it)"
+	else
+		log "add $bin_dir_expanded to PATH: export PATH=\"$bin_dir_expanded:\$PATH\""
+	fi
 }
 
 cleanup() {

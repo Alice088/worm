@@ -20,14 +20,32 @@ Linux or macOS (amd64/arm64), one command:
 curl -fsSL https://raw.githubusercontent.com/Alice088/worm/master/install.sh | bash
 ```
 
-The script downloads the latest GitHub release, verifies `sha256`, and installs `worm` and
-`worm-server` into `~/.local/bin`. Add it to `PATH` if the installer tells you to:
+The installer detects the platform, downloads the latest release, verifies `sha256`, installs
+`worm` and `worm-server` into `~/.local/bin`, and adds that directory to `PATH` (restart the
+shell afterwards). Verify with `worm --version`.
+
+### Make a call
 
 ```bash
-export PATH="$HOME/.local/bin:$PATH"
+worm
 ```
 
-Other install options:
+Nothing to configure up front: the display name defaults to your hostname and settings are
+stored in `~/.worm/config`.
+
+- **No server?** Press `m` for **Manual exchange**, create an offer, send the code to the
+  peer, and paste the answer code back. Zero setup, no accounts.
+- **Have a server?** Press `6`, paste the server URL once — or start your own with
+  `WORM_SECRET='change-me-at-least-16-chars' worm-server` — then use **Create a call** and
+  **Join a call** like a phone.
+
+Everything stays editable later from the same menu: `3` changes the name, `6` the server,
+`4` checks for updates, `5` uninstalls.
+
+Live audio requires Linux with ALSA utilities (`arecord`, `aplay`). Without them the UI,
+signaling, and code exchange still work, but a call fails with an `audio device` error.
+
+### Install management
 
 ```bash
 # update to the latest release
@@ -40,66 +58,17 @@ curl -fsSL https://raw.githubusercontent.com/Alice088/worm/master/install.sh | b
 curl -fsSL https://raw.githubusercontent.com/Alice088/worm/master/install.sh | bash -s -- --uninstall
 curl -fsSL https://raw.githubusercontent.com/Alice088/worm/master/install.sh | bash -s -- --uninstall --purge
 
-# custom directory
-curl -fsSL https://raw.githubusercontent.com/Alice088/worm/master/install.sh | bash -s -- --dir /usr/local/bin
+# custom directory, no PATH changes
+curl -fsSL https://raw.githubusercontent.com/Alice088/worm/master/install.sh | bash -s -- --dir /usr/local/bin --no-path
 ```
 
-Check the version with `worm --version`.
-
-Live audio requires Linux with ALSA utilities (`arecord`, `aplay`). Without them the UI,
-signaling, and code exchange still work, but a call fails with an `audio device` error.
-
-### Call over a signaling server
-
-1. Start the server (anywhere both peers can reach it):
-
-   ```bash
-   export WORM_SECRET='change-me-at-least-16-chars'
-   worm-server
-   ```
-
-2. Configure the client: `~/.worm/config`
-
-   ```ini
-   name=alice
-   server=http://127.0.0.1:8080
-   ```
-
-3. Run `worm`, pick **Create a call**, and send the invite code to the peer.
-4. The peer runs `worm`, picks **Join a call**, pastes the code, and accepts with `a`.
-5. Talk. `m` mutes, `q` ends the call.
-
-`server=` can be overridden with the `WORM_SERVER` environment variable, and `WORM_HOME`
-changes the config directory (default `~/.worm`).
-
-### Call without a server
-
-No infrastructure needed: the peers exchange two codes over any channel (chat, email, QR).
-
-1. Both run `worm` and press `m` for **Manual exchange**.
-2. Caller picks **Create offer**, copies the offer code with `c`, and sends it.
-3. Callee picks **Answer an offer**, pastes the offer code, generates an answer code, and
-   sends it back.
-4. Caller pastes the answer code and presses `enter` to connect.
-5. If a side later gathers new ICE candidates, it sends them as a separate code that the
-   other side pastes into **PASTE MORE CANDIDATES**.
-
-Codes are self-contained (SDP plus every gathered ICE candidate), roughly 5–6 KB of hex.
-`c` copies a code, `s` saves it to `~/.worm/last-signal.txt`.
-
-### Inside the TUI
-
-The main menu also carries release management:
-
-- **Version & updates** (`4`/`u`) — shows the installed version and the latest release;
-  `r` re-checks, `enter` installs the update (restart `worm` afterwards).
-- **Uninstall worm** (`5`/`x`) — removes the binary and `worm-server`; `y` confirms,
-  `~/.worm` is kept.
+The same actions are available in the TUI under **Version & updates** and
+**Uninstall worm**.
 
 ### Keyboard reference
 
-Main screen: `1` create, `2` join, `m` manual exchange, `3` rename, `4` updates,
-`5` uninstall, `↑/↓` + `enter` to navigate, `ctrl+c` to quit.
+Main screen: `1` create, `2` join, `m` manual exchange, `3` rename, `6` server,
+`4` updates, `5` uninstall, `↑/↓` + `enter` to navigate, `ctrl+c` to quit.
 
 Call screen: `←/→` move focus, `a` accept, `r` reject, `m` mute, `c` copy invite,
 `q`/`esc` end or cancel.
@@ -161,7 +130,8 @@ Domain rules:
 What the user sees:
 
 - main screen: server, name, **Create a call** / **Join a call** / **Manual exchange** /
-  **Change my name** / **Version & updates** / **Uninstall worm**;
+  **Change my name** / **Set signaling server** / **Version & updates** /
+  **Uninstall worm**;
 - call screen: participants, state (`ringing`, `accepted`, `connecting`, `connected`,
   `ended`, …), invite code, quality (`rtt`, `jitter`, `loss`, `direct`/`relayed via turn`),
   controls (accept/reject/mute/copy/end), and readable errors.
@@ -232,7 +202,8 @@ back `install.sh`.
 
 ### Client
 
-`~/.worm/config`:
+Set the server from the TUI (`6`) or write `~/.worm/config` directly; the display name
+defaults to the hostname:
 
 ```ini
 name=alice
@@ -295,7 +266,8 @@ STUN defaults to `stun:stun.l.google.com:19302`. For relay, add a TURN server to
 
 - `audio device` error — install ALSA utilities (`arecord`, `aplay`) and check the capture
   device; signaling and manual exchange work without audio.
-- `server not configured` — set `server=` in `~/.worm/config` or `WORM_SERVER`.
+- `server not configured` — press `6` and paste the server URL, or set `server=` in
+  `~/.worm/config` / `WORM_SERVER`.
 - Clipboard does not work (`c`) — worm uses `wl-copy`/`xclip`/`xsel`/`pbcopy`, then the
   OSC 52 escape sequence; over SSH or in unsupported terminals press `s` to save the code
   to `~/.worm/last-signal.txt`.

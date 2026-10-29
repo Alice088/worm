@@ -3,6 +3,7 @@ package pages
 import (
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -35,6 +36,8 @@ const (
 	ActionInstallUpdate
 	// ActionUninstall asks the app to remove the installed program.
 	ActionUninstall
+	// ActionSetServer asks the app to persist a signaling server URL.
+	ActionSetServer
 )
 
 // MainMode is the input mode of the main screen.
@@ -51,6 +54,8 @@ const (
 	ModeVersion
 	// ModeUninstall asks for confirmation before removing the program.
 	ModeUninstall
+	// ModeServer is the "set signaling server" form.
+	ModeServer
 )
 
 // menuIndex values. Create is the primary call to action, so it is on top.
@@ -59,6 +64,7 @@ const (
 	menuJoin
 	menuManual
 	menuRename
+	menuServer
 	menuVersion
 	menuUninstall
 	menuCount
@@ -77,6 +83,7 @@ type MainModel struct {
 	index     int
 	joinIn    codeInput
 	nameIn    textinput.Model
+	serverIn  textinput.Model
 	err       string
 	notice    string
 	noticeErr string
@@ -98,6 +105,11 @@ func NewMain(appName, version, userName, savePath string) MainModel {
 	name.CharLimit = 32
 	name.SetValue(userName)
 
+	server := textinput.New()
+	server.Placeholder = "http://host:8080 (empty = manual only)"
+	server.Prompt = "⇄ "
+	server.CharLimit = 256
+
 	return MainModel{
 		AppName:  appName,
 		Version:  version,
@@ -106,6 +118,7 @@ func NewMain(appName, version, userName, savePath string) MainModel {
 		index:    menuCreate,
 		joinIn:   join,
 		nameIn:   name,
+		serverIn: server,
 		savePath: savePath,
 	}
 }
@@ -131,6 +144,8 @@ func (m MainModel) Update(msg tea.Msg) (MainModel, MainMenuAction, string, tea.C
 			return m.updateVersion(msg)
 		case ModeUninstall:
 			return m.updateUninstall(msg)
+		case ModeServer:
+			return m.updateServer(msg)
 		default:
 			return m.updateMenu(msg)
 		}
@@ -145,6 +160,10 @@ func (m MainModel) Update(msg tea.Msg) (MainModel, MainMenuAction, string, tea.C
 	case ModeName:
 		var cmd tea.Cmd
 		m.nameIn, cmd = m.nameIn.Update(msg)
+		return m, ActionNone, "", cmd
+	case ModeServer:
+		var cmd tea.Cmd
+		m.serverIn, cmd = m.serverIn.Update(msg)
 		return m, ActionNone, "", cmd
 	}
 	return m, ActionNone, "", nil
@@ -169,6 +188,8 @@ func (m MainModel) updateMenu(msg tea.KeyPressMsg) (MainModel, MainMenuAction, s
 		return m.openVersion()
 	case "5", "x":
 		return m.openUninstall()
+	case "6", "s":
+		return m.openServer()
 	case "m":
 		return m, ActionManual, "", nil
 	case "n":
@@ -183,6 +204,8 @@ func (m MainModel) updateMenu(msg tea.KeyPressMsg) (MainModel, MainMenuAction, s
 			return m, ActionManual, "", nil
 		case menuRename:
 			return m.openRename()
+		case menuServer:
+			return m.openServer()
 		case menuVersion:
 			return m.openVersion()
 		default:
@@ -199,6 +222,39 @@ func (m MainModel) openVersion() (MainModel, MainMenuAction, string, tea.Cmd) {
 	m.checking = true
 	m.noticeErr = ""
 	return m, ActionCheckUpdate, "", nil
+}
+
+func (m MainModel) openServer() (MainModel, MainMenuAction, string, tea.Cmd) {
+	m.mode = ModeServer
+	m.err = ""
+	m.notice = ""
+	m.serverIn.SetValue(m.Server)
+	m.serverIn.CursorEnd()
+	return m, ActionNone, "", m.serverIn.Focus()
+}
+
+func (m MainModel) updateServer(msg tea.KeyPressMsg) (MainModel, MainMenuAction, string, tea.Cmd) {
+	switch msg.String() {
+	case "esc":
+		m.mode = ModeMenu
+		m.err = ""
+		m.serverIn.Blur()
+		return m, ActionNone, "", nil
+	case "enter":
+		server := strings.TrimSpace(m.serverIn.Value())
+		if err := validateServer(server); err != nil {
+			m.err = err.Error()
+			return m, ActionNone, "", nil
+		}
+		m.mode = ModeMenu
+		m.serverIn.Blur()
+		return m, ActionSetServer, server, nil
+	}
+
+	var cmd tea.Cmd
+	m.serverIn, cmd = m.serverIn.Update(msg)
+	m.err = ""
+	return m, ActionNone, "", cmd
 }
 
 func (m MainModel) openUninstall() (MainModel, MainMenuAction, string, tea.Cmd) {
@@ -329,6 +385,9 @@ func (m *MainModel) SetUser(name string) {
 // SetServer records the signaling server shown in the header.
 func (m *MainModel) SetServer(server string) {
 	m.Server = server
+	if m.serverIn.Value() != server {
+		m.serverIn.SetValue(server)
+	}
 }
 
 // SetNotice shows a transient success line on the menu.
@@ -390,6 +449,8 @@ func (m MainModel) View() string {
 		body = m.viewVersion()
 	case ModeUninstall:
 		body = m.viewUninstall()
+	case ModeServer:
+		body = m.viewServer()
 	default:
 		body = m.viewMenu()
 	}
@@ -409,7 +470,7 @@ func (m MainModel) View() string {
 	))
 
 	if m.W > 0 && m.H > 0 {
-		return lipgloss.Place(m.W, m.H, lipgloss.Center, lipgloss.Center, card)
+		return clipHeight(lipgloss.Place(m.W, m.H, lipgloss.Center, lipgloss.Center, card), m.H)
 	}
 	return card
 }
@@ -424,6 +485,7 @@ func (m MainModel) viewMenu() string {
 		{"Join a call", "paste an invite code from another client", "2"},
 		{"Manual exchange", "swap SDP + ICE codes with a peer, no server", "m"},
 		{"Change my name", "stored in " + shortPath(m.savePath) + " as name=…", "3"},
+		{"Set signaling server", "enables Create/Join; manual exchange needs none", "6"},
 		{"Version & updates", "shows the installed version and installs the latest", "4"},
 		{"Uninstall worm", "removes the program from this machine", "5"},
 	}
@@ -518,6 +580,39 @@ func (m MainModel) viewVersion() string {
 		lines = append(lines, StyleHint.Render("r recheck · esc back"))
 	}
 	return lipgloss.JoinVertical(lipgloss.Left, lines...)
+}
+
+func (m MainModel) viewServer() string {
+	lines := []string{
+		StyleLabel.Render("SIGNALING SERVER"),
+		m.fieldBox(m.serverIn.View()),
+		StyleMuted.Render("leave empty to use manual exchange only"),
+	}
+	if m.err != "" {
+		lines = append(lines, StyleError.Render("✗ "+m.err))
+	}
+	lines = append(lines,
+		"",
+		StyleHint.Render("enter save · esc cancel · ctrl+v paste"),
+	)
+	return lipgloss.JoinVertical(lipgloss.Left, lines...)
+}
+
+func validateServer(server string) error {
+	if server == "" {
+		return nil
+	}
+	parsed, err := url.Parse(server)
+	if err != nil {
+		return errors.New("not a valid URL")
+	}
+	if parsed.Scheme != "http" && parsed.Scheme != "https" {
+		return errors.New("URL must start with http:// or https://")
+	}
+	if parsed.Host == "" {
+		return errors.New("URL has no host")
+	}
+	return nil
 }
 
 func (m MainModel) viewUninstall() string {
