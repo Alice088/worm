@@ -145,8 +145,8 @@ func defaultName() string {
 type copiedMsg struct{ err error }
 
 type updateCheckMsg struct {
-	tag string
-	err error
+	release updater.Release
+	err     error
 }
 
 type updateInstallMsg struct {
@@ -160,8 +160,8 @@ func checkUpdate() tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
-		tag, err := updater.Latest(ctx)
-		return updateCheckMsg{tag: tag, err: err}
+		release, err := updater.LatestRelease(ctx)
+		return updateCheckMsg{release: release, err: err}
 	}
 }
 
@@ -275,7 +275,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.main.SetNoReleases()
 			return m, nil
 		}
-		m.main.SetLatest(msg.tag, msg.err)
+		m.main.SetLatest(msg.release.Tag, msg.release.Notes, msg.err)
 		return m, nil
 
 	case updateInstallMsg:
@@ -285,7 +285,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.main.SetNotice("")
 			return m, nil
 		}
-		m.main.SetLatest(msg.tag, nil)
+		m.main.SetLatest(msg.tag, "", nil)
 		m.main.SetNotice("updated to " + msg.tag + " — restart worm")
 		return m, nil
 

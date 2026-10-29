@@ -67,6 +67,9 @@ curl -fsSL https://raw.githubusercontent.com/Alice088/worm/master/install.sh | b
 curl -fsSL https://raw.githubusercontent.com/Alice088/worm/master/install.sh | bash -s -- --dir /usr/local/bin --no-path
 ```
 
+In the TUI, `4` shows the installed and latest version, lists the release notes when a newer
+version exists, and installs it in place.
+
 The same actions are available in the TUI under **Version & updates** and
 **Uninstall worm**.
 

@@ -3,6 +3,7 @@ package pages
 import (
 	"errors"
 	"net/url"
+	"regexp"
 	"strings"
 
 	"charm.land/bubbles/v2/textinput"
@@ -86,6 +87,7 @@ type MainModel struct {
 	noticeErr  string
 	savePath   string
 	latest     string
+	notes      string
 	latestErr  string
 	noReleases bool
 	checking   bool
@@ -216,6 +218,7 @@ func (m MainModel) updateMenu(msg tea.KeyPressMsg) (MainModel, MainMenuAction, s
 func (m MainModel) openVersion() (MainModel, MainMenuAction, string, tea.Cmd) {
 	m.mode = ModeVersion
 	m.latest = ""
+	m.notes = ""
 	m.latestErr = ""
 	m.noReleases = false
 	m.checking = true
@@ -394,18 +397,20 @@ func (m *MainModel) SetNotice(msg string) {
 	m.notice = msg
 }
 
-// SetLatest records the newest release tag fetched from GitHub.
 func (m *MainModel) SetNoReleases() {
 	m.checking = false
 	m.noReleases = true
 	m.latest = ""
+	m.notes = ""
 	m.latestErr = ""
 }
 
-func (m *MainModel) SetLatest(tag string, err error) {
+// SetLatest records the newest release tag and its notes fetched from GitHub.
+func (m *MainModel) SetLatest(tag, notes string, err error) {
 	m.checking = false
 	m.noReleases = false
 	m.latest = tag
+	m.notes = notes
 	if err != nil {
 		m.latestErr = err.Error()
 		return
@@ -580,6 +585,12 @@ func (m MainModel) viewVersion() string {
 	default:
 		lines = append(lines, StyleMuted.Render(m.latest+" · up to date"))
 	}
+
+	if notes := m.releaseNotes(); m.updateAvailable() && len(notes) > 0 {
+		lines = append(lines, "", StyleLabel.Render("WHAT'S NEW"), "")
+		lines = append(lines, StyleMuted.Render(strings.Join(notes, "\n")))
+	}
+
 	lines = append(lines, "")
 	switch {
 	case m.busy:
@@ -608,6 +619,55 @@ func (m MainModel) viewServer() string {
 	)
 	return lipgloss.JoinVertical(lipgloss.Left, lines...)
 }
+
+func (m MainModel) releaseNotes() []string {
+	width, limit := 64, 8
+	if m.W > 0 {
+		width = min(width, m.W-24)
+	}
+	if m.H > 0 {
+		limit = min(limit, max(2, m.H-18))
+	}
+	if width < 24 {
+		width = 24
+	}
+	return notesLines(m.notes, width, limit)
+}
+
+func notesLines(body string, width, limit int) []string {
+	body = strings.ReplaceAll(body, "\r\n", "\n")
+	var out []string
+	for _, raw := range strings.Split(body, "\n") {
+		line := strings.TrimSpace(raw)
+		if line == "" || strings.HasPrefix(line, "<!--") {
+			continue
+		}
+		if strings.Contains(strings.ToLower(line), "full changelog") {
+			continue
+		}
+		line = releasePrefix.ReplaceAllString(line, "")
+		line = strings.NewReplacer("**", "", "`", "", "__", "").Replace(line)
+		line = releaseLink.ReplaceAllString(line, "$1")
+		line = releaseByline.ReplaceAllString(line, "")
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		for _, wrapped := range strings.Split(wrap(line, width), "\n") {
+			out = append(out, wrapped)
+			if len(out) >= limit {
+				return out
+			}
+		}
+	}
+	return out
+}
+
+var (
+	releaseLink   = regexp.MustCompile(`\[([^\]]*)\]\([^)]*\)`)
+	releasePrefix = regexp.MustCompile(`^[#>*+~-]+\s*`)
+	releaseByline = regexp.MustCompile(`\s+by @\S+ in \S+\s*$`)
+)
 
 func validateServer(server string) error {
 	if server == "" {

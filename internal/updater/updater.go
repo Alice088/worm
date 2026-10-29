@@ -30,10 +30,25 @@ var ErrNoReleases = errors.New("no releases published yet")
 
 var httpClient = &http.Client{Timeout: 90 * time.Second}
 
+type Release struct {
+	Tag   string
+	Name  string
+	Notes string
+	URL   string
+}
+
 func Latest(ctx context.Context) (string, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, APIBase+"/releases/latest", nil)
+	release, err := LatestRelease(ctx)
 	if err != nil {
 		return "", err
+	}
+	return release.Tag, nil
+}
+
+func LatestRelease(ctx context.Context) (Release, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, APIBase+"/releases/latest", nil)
+	if err != nil {
+		return Release{}, err
 	}
 	req.Header.Set("Accept", "application/vnd.github+json")
 	if token := os.Getenv("GITHUB_TOKEN"); token != "" {
@@ -42,27 +57,30 @@ func Latest(ctx context.Context) (string, error) {
 
 	resp, err := httpClient.Do(req)
 	if err != nil {
-		return "", err
+		return Release{}, err
 	}
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode == http.StatusNotFound {
-		return "", ErrNoReleases
+		return Release{}, ErrNoReleases
 	}
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("github api: %s", resp.Status)
+		return Release{}, fmt.Errorf("github api: %s", resp.Status)
 	}
 
 	var payload struct {
 		TagName string `json:"tag_name"`
+		Name    string `json:"name"`
+		Body    string `json:"body"`
+		HTMLURL string `json:"html_url"`
 	}
 	if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&payload); err != nil {
-		return "", err
+		return Release{}, err
 	}
 	if payload.TagName == "" {
-		return "", errors.New("github api: empty tag name")
+		return Release{}, errors.New("github api: empty tag name")
 	}
-	return payload.TagName, nil
+	return Release{Tag: payload.TagName, Name: payload.Name, Notes: payload.Body, URL: payload.HTMLURL}, nil
 }
 
 func AssetName(version string) (string, error) {
