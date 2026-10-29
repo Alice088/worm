@@ -92,6 +92,20 @@ detect_platform() {
 	esac
 }
 
+fetch() {
+	local url="$1" out="$2" attempt=1 waited=0
+	while :; do
+		curl -fsSL -o "$out" "$url" 2>/dev/null && return 0
+		[ "$attempt" -ge 12 ] && return 1
+		if [ "$waited" -eq 0 ]; then
+			log "release is still publishing, waiting…"
+			waited=1
+		fi
+		sleep 5
+		attempt=$((attempt + 1))
+	done
+}
+
 latest_tag() {
 	local url tag
 	url="$(curl -fsSLI -o /dev/null -w '%{url_effective}' "https://github.com/$REPO/releases/latest")" \
@@ -121,9 +135,9 @@ install_release() {
 	trap cleanup EXIT
 
 	log "downloading $asset ($tag)"
-	curl -fsSL --retry 3 -o "$WORK/$asset" "$base/$asset" \
+	fetch "$base/$asset" "$WORK/$asset" \
 		|| fail "release asset not found: $base/$asset"
-	curl -fsSL --retry 3 -o "$WORK/checksums.txt" "$base/checksums.txt" \
+	fetch "$base/checksums.txt" "$WORK/checksums.txt" \
 		|| fail "checksums.txt not found for $tag"
 
 	verify_checksum "$WORK/checksums.txt" "$asset" "$WORK/$asset"
